@@ -368,6 +368,11 @@ function renderExpandedRows(group, expiryInfos) {
 function renderExpirySoonBanner() {
   const banner = document.getElementById('expirySoonBanner');
   if (!banner) return;
+  // 비로그인 시 배너 숨김
+  if (!state.isAdmin) {
+    banner.style.display = 'none';
+    return;
+  }
   const count = getExpiringSoon(state.items).length;
   if (count > 0) {
     banner.style.display = 'flex';

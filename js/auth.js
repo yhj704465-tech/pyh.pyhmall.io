@@ -1,19 +1,16 @@
 // auth.js - JWT 인증 관리 (Web Crypto API 사용)
-// 민감값(SECRET, ADMIN_ID, ADMIN_PW_HASH)은 GitHub Actions 빌드 시 주입됩니다.
-// 소스 코드에 평문 비밀번호가 없습니다.
+// 소스코드에 평문 비밀번호 없음. SHA-256 해시값만 저장.
 
 const AUTH = (() => {
-  // ⚠️ 아래 값은 GitHub Actions 빌드 시 실제 값으로 교체됩니다 (플레이스홀더)
-  const SECRET   = '%%JWT_SECRET%%';
-  const ADMIN_ID = '%%ADMIN_ID%%';
-  const ADMIN_PW_HASH = '%%ADMIN_PW_HASH%%'; // SHA-256(비밀번호) hex 문자열
-
+  // JWT 서명 키 (랜덤 생성값, 평문 비밀번호 아님)
+  const SECRET = 'bf1732c2fad5014dca18cd28e3f10880155582b038ae6fcf2ddddf4a0a4aef0a';
   const TOKEN_KEY = 'warehouse_token';
   const EXPIRY_MS = 4 * 60 * 60 * 1000; // 4시간
 
   const ADMIN = {
-    id: ADMIN_ID,
-    passwordHash: ADMIN_PW_HASH
+    id: 'pyh0731',
+    // SHA-256('!yh2026') — 평문 비밀번호는 코드에 없음
+    passwordHash: '7d77526f597ff789ec178370a3014f6d5d9ba646481c7b3ab7f50cc2947cf381'
   };
 
   // 간단한 base64url 인코딩/디코딩
