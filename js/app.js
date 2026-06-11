@@ -7,7 +7,9 @@ let state = {
   showExpiringSoon: false,
   expandedIds: new Set(),
   editingId: null,
-  filterCode: null, // 코드별 필터
+  filterCode: null,
+  sortField: null,   // 'code'|'name'|'expiry'
+  sortDir:   'asc',  // 'asc'|'desc'
 };
 
 const LOG_KEY = 'warehouse_log';
@@ -240,32 +242,61 @@ function showAddConfirm() {
     return;
   }
 
-  // 코드 필수 검증
-  const noCode = parsed.filter(e => !e.code);
-  if (noCode.length > 0) {
-    showToast(`품목코드가 없는 항목이 있습니다: ${noCode.map(e => e.name).join(', ')}`, 'error');
-    return;
-  }
+  // 코드 없는 항목: 품명으로 퍼지 매칭
+  parsed.forEach(e => {
+    if (!e.code) {
+      e._match = fuzzyMatchBest(e.name);
+      e._matchState = e._match ? 'matched' : 'unmatched'; // 'matched'|'unmatched'|'new'
+    }
+  });
 
   _pendingAddItems = parsed;
 
-  const rows = parsed.map(e => {
-    const expCell = e.expiryRaw
-      ? escapeHtml(e.expiryRaw)
-      : `<span class="no-expiry">없음</span>`;
-    return `<tr>
-      <td class="ct-code">${e.code}</td>
-      <td class="ct-name">${escapeHtml(e.name)}</td>
-      <td class="ct-qty">${formatAddQty(e)}</td>
-      <td class="ct-exp">${expCell}</td>
-    </tr>`;
-  }).join('');
+  const codedItems   = parsed.filter(e => e.code);
+  const noCodeItems  = parsed.filter(e => !e.code);
 
-  document.getElementById('confirmItemsTable').innerHTML = `
-    <table class="confirm-table">
+  let html = '';
+
+  // ── 코드 지정 항목 ──
+  if (codedItems.length > 0) {
+    html += `<div class="add-section-label">📦 코드 지정 항목</div>`;
+    const rows = codedItems.map(e => {
+      const existingGroup = state.items.some(i => i.code === e.code);
+      const sameExpiry = existingGroup && state.items.some(i =>
+        i.code === e.code && (i.expiryRaw || '') === (e.expiryRaw || '')
+      );
+      const badge = !existingGroup
+        ? `<span class="ac-badge ac-badge-new">신규</span>`
+        : sameExpiry
+          ? `<span class="ac-badge ac-badge-merge">재고합산</span>`
+          : `<span class="ac-badge ac-badge-lot">+로트추가</span>`;
+      const expCell = e.expiryRaw
+        ? escapeHtml(e.expiryRaw)
+        : `<span class="no-expiry">없음 (자동채움)</span>`;
+      return `<tr>
+        <td class="ct-code">${e.code} ${badge}</td>
+        <td class="ct-name">${escapeHtml(e.name)}</td>
+        <td class="ct-qty">${formatAddQty(e)}</td>
+        <td class="ct-exp">${expCell}</td>
+      </tr>`;
+    }).join('');
+    html += `<table class="confirm-table">
       <thead><tr><th>코드</th><th>품명</th><th>수량</th><th>소비기한</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
+  }
+
+  // ── 코드 없는 항목 (기존 물품 매칭) ──
+  if (noCodeItems.length > 0) {
+    html += `<div class="add-section-label" style="margin-top:8px">🔍 품목코드 없음 — 기존 물품 매칭 필요</div>`;
+    noCodeItems.forEach((e, localIdx) => {
+      const globalIdx = parsed.indexOf(e);
+      html += renderAddMatchCard(e, globalIdx);
+    });
+  }
+
+  document.getElementById('confirmItemsTable').innerHTML = html;
+  bindAddMatchEvents();
 
   document.getElementById('addInputView').style.display = 'none';
   document.getElementById('addConfirmView').style.display = 'block';
@@ -273,24 +304,145 @@ function showAddConfirm() {
   document.getElementById('addFooter2').style.display = 'flex';
   const title = document.querySelector('#addModal .modal-title');
   if (title) title.textContent = `${parsed.length}개 항목 — 등록 확인`;
+  updateAddConfirmBtn();
+}
+
+function renderAddMatchCard(entry, idx) {
+  const expCell = entry.expiryRaw ? escapeHtml(entry.expiryRaw) : '<span class="no-expiry">없음</span>';
+  const qtyStr  = formatAddQty(entry);
+
+  if (entry._matchState === 'new') {
+    return `<div class="amc-card amc-new" data-idx="${idx}">
+      <div class="amc-query">"${escapeHtml(entry.name)}" · ${qtyStr} · ${expCell}</div>
+      <div class="amc-status">🆕 신규 물품으로 등록 (코드 자동 부여)
+        <button class="amc-cancel-new btn btn-outline" data-idx="${idx}" style="margin-left:8px;font-size:11px">매칭으로 변경</button>
+      </div>
+    </div>`;
+  }
+
+  if (entry._matchState === 'matched' && entry._match) {
+    return `<div class="amc-card amc-matched" data-idx="${idx}">
+      <div class="amc-query">"${escapeHtml(entry.name)}" · ${qtyStr} · ${expCell}</div>
+      <div class="amc-status">✅ 매칭: <strong>${entry._match.code}</strong> ${escapeHtml(entry._match.name)}
+        <button class="amc-rematch-btn btn btn-outline" data-idx="${idx}" style="margin-left:8px;font-size:11px">변경</button>
+        <button class="amc-as-new-btn btn btn-outline" data-idx="${idx}" style="font-size:11px">신규 등록</button>
+      </div>
+    </div>`;
+  }
+
+  // unmatched
+  return `<div class="amc-card amc-unmatched" data-idx="${idx}">
+    <div class="amc-query">⚠️ "${escapeHtml(entry.name)}" · ${qtyStr} · ${expCell}</div>
+    <div style="position:relative;margin-top:6px">
+      <input type="text" class="amc-search-input form-input" data-idx="${idx}"
+        placeholder="품명 또는 코드 재검색..." style="font-size:13px;margin-bottom:0">
+      <ul class="amc-results" style="display:none;position:absolute;z-index:200;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);width:100%;list-style:none;padding:0;margin:0;max-height:160px;overflow-y:auto;top:100%;left:0"></ul>
+    </div>
+    <button class="amc-as-new-btn btn btn-outline" data-idx="${idx}" style="margin-top:6px;font-size:11px">신규 물품으로 등록</button>
+  </div>`;
+}
+
+function bindAddMatchEvents() {
+  const wrap = document.getElementById('confirmItemsTable');
+  if (!wrap) return;
+
+  // 재검색 input
+  wrap.querySelectorAll('.amc-search-input').forEach(inp => {
+    const idx      = parseInt(inp.dataset.idx);
+    const resultsEl = inp.parentElement.querySelector('.amc-results');
+    inp.addEventListener('input', () => {
+      const q = inp.value;
+      if (!q.trim()) { resultsEl.innerHTML = ''; resultsEl.style.display = 'none'; return; }
+      const hits = fuzzyMatchItems(q);
+      resultsEl.innerHTML = hits.length === 0
+        ? '<li class="qs-no-result">검색 결과 없음</li>'
+        : hits.map(item =>
+            `<li class="qs-item" data-code="${item.code}" data-name="${escapeHtml(item.name)}" data-idx="${idx}">
+              <span class="qs-code">${item.code}</span>
+              <span class="qs-name">${escapeHtml(item.name)}</span>
+              <span class="qs-stock">${(item.totalStock||0).toLocaleString()}개</span>
+            </li>`
+          ).join('');
+      resultsEl.style.display = 'block';
+      resultsEl.querySelectorAll('.qs-item').forEach(el => {
+        el.addEventListener('click', () => {
+          _pendingAddItems[idx]._match = state.items.find(i => i.code === parseInt(el.dataset.code));
+          _pendingAddItems[idx]._matchState = 'matched';
+          refreshAddMatchCard(idx);
+        });
+      });
+    });
+  });
+
+  // 검색 변경 버튼
+  wrap.querySelectorAll('.amc-rematch-btn, .amc-cancel-new').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      _pendingAddItems[idx]._match = null;
+      _pendingAddItems[idx]._matchState = 'unmatched';
+      refreshAddMatchCard(idx);
+    });
+  });
+
+  // 신규 등록 버튼
+  wrap.querySelectorAll('.amc-as-new-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      _pendingAddItems[idx]._matchState = 'new';
+      refreshAddMatchCard(idx);
+    });
+  });
+}
+
+function refreshAddMatchCard(idx) {
+  const entry   = _pendingAddItems[idx];
+  const oldCard = document.querySelector(`[data-idx="${idx}"].amc-card`);
+  if (!oldCard) return;
+  const newCard = document.createElement('div');
+  newCard.innerHTML = renderAddMatchCard(entry, idx);
+  oldCard.replaceWith(newCard.firstElementChild);
+  bindAddMatchEvents();
+  updateAddConfirmBtn();
+}
+
+function updateAddConfirmBtn() {
+  if (!_pendingAddItems) return;
+  const noCodeItems = _pendingAddItems.filter(e => !e.code);
+  const allResolved = noCodeItems.every(e => e._matchState === 'matched' || e._matchState === 'new');
+  const btn = document.getElementById('addConfirmBtn');
+  if (btn) {
+    btn.disabled = !allResolved;
+    btn.title    = allResolved ? '' : '매칭되지 않은 항목이 있습니다.';
+  }
 }
 
 function doConfirmedAdd() {
   if (!_pendingAddItems || _pendingAddItems.length === 0) return;
 
+  // 노코드 항목에 매칭된 코드 적용
+  for (const entry of _pendingAddItems) {
+    if (!entry.code) {
+      if (entry._matchState === 'matched' && entry._match) {
+        entry.code = entry._match.code;
+        entry.name = entry._match.name; // 정확한 품명으로 교체
+      }
+      // 'new' → addItems 에서 자동 코드 부여
+    }
+  }
+
   const beforeIds = new Set(state.items.map(i => i.id));
-  addItems(state.items, _pendingAddItems);
-  const addedIds = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
-  const label = _pendingAddItems.length === 1
+  const added     = addItems(state.items, _pendingAddItems);
+  const newIds    = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
+  const label     = _pendingAddItems.length === 1
     ? _pendingAddItems[0].name
     : `${_pendingAddItems[0].name} 외 ${_pendingAddItems.length - 1}개`;
   saveInventory(state.items);
-  addLogEntry('add', label, { ids: addedIds });
+  addLogEntry('add', label, { ids: newIds });
 
   _pendingAddItems = null;
   closeModal('addModal');
   renderAll();
-  showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
+  showToast(`${added.length}개 항목이 추가/합산되었습니다.`, 'success');
 }
 
 // ─── 소비기한 편집용 정규화 ───────────────────────────────────────────────────
@@ -517,7 +669,7 @@ function renderOutgoingLine(line, idx) {
       line.unitQty > 0 ? `${line.unitQty}개` : ''
     ].filter(Boolean).join(' ');
     const afterTotal = gs.totalStock - (line.stockBoxes * (line.matched.boxQty || 1)) - line.unitQty;
-    const afterOk = afterTotal >= 0;
+    const isNeg = afterTotal < 0;
     return `<div class="og-row og-matched">
       <div class="og-row-header">
         <span class="og-status-icon">✅</span>
@@ -529,8 +681,8 @@ function renderOutgoingLine(line, idx) {
       </div>
       <div class="og-numbers">
         <span class="og-deduct">− ${deductStr}</span>
-        <span class="og-stock-after" ${!afterOk ? 'style="color:var(--danger);font-weight:700"' : ''}>
-          출고 후: ${afterOk ? afterTotal.toLocaleString() + '개' : '재고 부족!'}
+        <span class="og-stock-after" ${isNeg ? 'style="color:var(--danger);font-weight:700"' : ''}>
+          출고 후: ${afterTotal.toLocaleString()}개${isNeg ? ' ⚠️ 마이너스' : ''}
         </span>
         ${gs.earliestExpiry ? `<span class="og-expiry">소비기한: ${escapeHtml(gs.earliestExpiry)}</span>` : ''}
       </div>
@@ -568,6 +720,13 @@ function processOutgoing(outLines) {
       const takeUnits = Math.min(remainUnits, row.unitQty || 0);
       row.unitQty = (row.unitQty || 0) - takeUnits; remainUnits -= takeUnits;
       row.totalStock = row.stockBoxes * (row.boxQty || 1) + row.unitQty;
+    }
+    // FIFO 소진 후에도 잔여량이 있으면 첫 로트에 마이너스 적용
+    if ((remainBoxes > 0 || remainUnits > 0) && rows.length > 0) {
+      const first = rows[0];
+      first.stockBoxes = (first.stockBoxes || 0) - remainBoxes;
+      first.unitQty    = (first.unitQty    || 0) - remainUnits;
+      first.totalStock = first.stockBoxes * (first.boxQty || 1) + first.unitQty;
     }
   });
 }
@@ -608,9 +767,10 @@ function saveOutgoingRecord(lines) {
       items: lines
         .filter(l => l.matched && !l.skipped)
         .map(l => ({
-          code: l.matched.code,
-          name: l.matched.name,
-          total: l.stockBoxes * (l.matched.boxQty || 1) + l.unitQty,
+          code:  l.matched.code,
+          name:  l.matched.name,
+          boxes: l.stockBoxes,                                            // 박스 단위
+          total: l.stockBoxes * (l.matched.boxQty || 1) + l.unitQty,    // 하위호환용
         }))
     };
     if (entry.items.length === 0) return;
@@ -630,11 +790,11 @@ function getTopOutgoing(days = 30) {
     for (const rec of recent) {
       for (const item of rec.items) {
         if (!totals.has(item.code))
-          totals.set(item.code, { code: item.code, name: item.name, total: 0 });
-        totals.get(item.code).total += item.total;
+          totals.set(item.code, { code: item.code, name: item.name, boxes: 0 });
+        totals.get(item.code).boxes += (item.boxes ?? item.total ?? 0); // 구버전 호환
       }
     }
-    const top = [...totals.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+    const top = [...totals.values()].sort((a, b) => b.boxes - a.boxes).slice(0, 10);
     return { top, opCount: recent.length };
   } catch { return { top: [], opCount: 0 }; }
 }
@@ -662,11 +822,11 @@ function renderTopPanel() {
   const RANK_BADGE = ['tp-rank-1','tp-rank-2','tp-rank-3'];
   const BAR_FILL   = ['tp-fill-1','tp-fill-2','tp-fill-3'];
   const RANK_ICON  = ['🥇','🥈','🥉'];
-  const maxTotal   = top[0].total;
+  const maxBoxes   = top[0].boxes;
 
   listEl.innerHTML = top.map((item, idx) => {
     const rank   = idx + 1;
-    const pct    = Math.max(7, Math.round((item.total / maxTotal) * 100));
+    const pct    = Math.max(7, Math.round((item.boxes / maxBoxes) * 100));
     const delay  = (idx * 0.07).toFixed(2);
     const badgeCls = RANK_BADGE[idx] || 'tp-rank-n';
     const barCls   = BAR_FILL[idx]   || 'tp-fill-n';
@@ -679,7 +839,7 @@ function renderTopPanel() {
           <div class="tp-bar-track">
             <div class="tp-bar-fill ${barCls}" style="width:${pct}%;animation-delay:${delay}s"></div>
           </div>
-          <span class="tp-qty">${item.total.toLocaleString()}개</span>
+          <span class="tp-qty">${item.boxes.toLocaleString()}박스</span>
         </div>
       </div>
     </div>`;
@@ -749,7 +909,30 @@ function renderInventoryTable() {
     filtered = filtered.filter(i => i.code === state.filterCode);
   }
 
-  const groups = groupByCode(filtered);
+  let groups = groupByCode(filtered);
+
+  // 정렬
+  if (state.sortField) {
+    groups.sort((a, b) => {
+      let av, bv;
+      if (state.sortField === 'code') {
+        av = a[0].code;
+        bv = b[0].code;
+        return state.sortDir === 'asc' ? av - bv : bv - av;
+      } else if (state.sortField === 'name') {
+        av = (a[0].name || '').toLowerCase();
+        bv = (b[0].name || '').toLowerCase();
+      } else if (state.sortField === 'expiry') {
+        const ea = parseExpiry(a[0].expiryRaw, a[0].expiryPeriod);
+        const eb = parseExpiry(b[0].expiryRaw, b[0].expiryPeriod);
+        av = ea.daysLeft ?? 99999;
+        bv = eb.daysLeft ?? 99999;
+        return state.sortDir === 'asc' ? av - bv : bv - av;
+      }
+      if (av === undefined) return 0;
+      return state.sortDir === 'asc' ? av.localeCompare(bv, 'ko') : bv.localeCompare(av, 'ko');
+    });
+  }
 
   if (groups.length === 0) {
     container.innerHTML = `
@@ -1219,6 +1402,22 @@ function setupGlobalEvents() {
     exportToCSV();
   });
 
+  // 정렬 버튼
+  document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const field = btn.dataset.field;
+      if (state.sortField === field) {
+        state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.sortField = field;
+        state.sortDir   = 'asc';
+      }
+      document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('sort-active', 'sort-asc', 'sort-desc'));
+      btn.classList.add('sort-active', `sort-${state.sortDir}`);
+      renderInventoryTable();
+    });
+  });
+
   // 전체 펼치기/접기
   const expandAllBtn = document.getElementById('expandAllBtn');
   if (expandAllBtn) {
@@ -1538,10 +1737,48 @@ function setupSmoothPanels() {
   requestAnimationFrame(tick);
 }
 
+// ─── 접속자 수 추적 (같은 브라우저 내 탭 기준) ───────────────────────────────
+
+function setupPresence() {
+  const PKEY = 'warehouse_presence';
+  const sid  = `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+  function ping() {
+    if (!state.isAdmin) return;
+    try {
+      let p = {};
+      try { p = JSON.parse(localStorage.getItem(PKEY) || '{}'); } catch {}
+      p[sid] = Date.now();
+      const cutoff = Date.now() - 120000; // 2분 이상 무응답 제거
+      Object.keys(p).forEach(k => { if (p[k] < cutoff) delete p[k]; });
+      localStorage.setItem(PKEY, JSON.stringify(p));
+      const el = document.getElementById('userCount');
+      if (el) el.textContent = `접속 ${Object.keys(p).length}명`;
+    } catch {}
+  }
+
+  ping();
+  setInterval(ping, 30000);
+
+  window.addEventListener('beforeunload', () => {
+    try {
+      let p = {};
+      try { p = JSON.parse(localStorage.getItem(PKEY) || '{}'); } catch {}
+      delete p[sid];
+      localStorage.setItem(PKEY, JSON.stringify(p));
+    } catch {}
+  });
+
+  // 로그인/로그아웃 시 재ping
+  const origUpdateAuthUI = updateAuthUI;
+  // 단순히 setInterval 에서 처리 (updateAuthUI 가 매 30초 호출)
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await init();
   setupModals();
   setupGlobalEvents();
   setupScrollTop();
   setupSmoothPanels();
+  setupPresence();
 });

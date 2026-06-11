@@ -292,10 +292,17 @@ function parseTextEntry(line) {
     expiryStr = parts[3];
     period = parts[4] || '';
   } else if (parts.length === 3) {
-    // name/qty/expiry (코드 없음)
-    name = parts[0];
-    qtyStr = parts[1];
-    expiryStr = parts[2];
+    if (/^\d+$/.test(parts[0].trim())) {
+      // code/name/qty (소비기한 미기재)
+      code = parseInt(parts[0]);
+      name = parts[1];
+      qtyStr = parts[2];
+    } else {
+      // name/qty/expiry (코드 없음)
+      name = parts[0];
+      qtyStr = parts[1];
+      expiryStr = parts[2];
+    }
   } else {
     // name/qty
     name = parts[0];
@@ -344,23 +351,66 @@ function parseTextBlock(text) {
     .filter(Boolean);
 }
 
+// 동일 코드 그룹에서 가장 늦은 소비기한 raw 문자열 반환
+function getLatestExpiryForCode(items, code) {
+  const rows = items.filter(i => i.code === code && i.expiryRaw);
+  if (rows.length === 0) return null;
+  let latest = null, latestDate = null;
+  for (const r of rows) {
+    const info = parseExpiry(r.expiryRaw, r.expiryPeriod);
+    if (info.date && (!latestDate || info.date > latestDate)) {
+      latestDate = info.date;
+      latest = r.expiryRaw;
+    }
+  }
+  return latest;
+}
+
 // ─── CRUD 작업 ─────────────────────────────────────────────────────────────
 
 function addItems(items, newItems) {
   let nextId = getNextId(items);
   const added = [];
+  const maxCode = items.length > 0 ? Math.max(...items.map(i => i.code || 0)) : 0;
+  let autoCode = maxCode;
+
   for (const entry of newItems) {
     const boxQty = entry.boxQty || 1;
-    const totalStock = entry.stockBoxes * boxQty + entry.unitQty;
+
+    // 소비기한 미기재 시 동일 코드의 최신 소비기한으로 자동 채움
+    let expiryRaw = entry.expiryRaw || '';
+    if (!expiryRaw && entry.code) {
+      expiryRaw = getLatestExpiryForCode(items, entry.code) || '';
+    }
+
+    // 동일 코드 + 동일 소비기한 → 기존 로트에 재고 합산 (병합)
+    if (entry.code) {
+      const existing = items.find(i =>
+        i.code === entry.code && (i.expiryRaw || '') === (expiryRaw || '')
+      );
+      if (existing) {
+        existing.stockBoxes = (existing.stockBoxes || 0) + (entry.stockBoxes || 0);
+        existing.unitQty    = (existing.unitQty    || 0) + (entry.unitQty    || 0);
+        existing.totalStock = existing.stockBoxes * (existing.boxQty || 1) + existing.unitQty;
+        // 병합 항목도 added 에 넣어 doConfirmedAdd 에서 카운트 가능하게
+        added.push(existing);
+        continue;
+      }
+    }
+
+    // 코드 없는 신규 → 자동 코드 부여
+    const finalCode = entry.code || (++autoCode);
+
+    const totalStock = (entry.stockBoxes || 0) * boxQty + (entry.unitQty || 0);
     const item = {
       id: nextId++,
-      code: entry.code || (getNextId(items) + 9000),
+      code: finalCode,
       name: entry.name,
-      stockBoxes: entry.stockBoxes,
-      unitQty: entry.unitQty,
+      stockBoxes: entry.stockBoxes || 0,
+      unitQty:    entry.unitQty    || 0,
       totalStock,
       boxQty,
-      expiryRaw: entry.expiryRaw || '',
+      expiryRaw,
       expiryPeriod: entry.expiryPeriod || '',
       hasMulti: false
     };
