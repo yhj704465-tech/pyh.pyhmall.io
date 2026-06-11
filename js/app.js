@@ -137,9 +137,11 @@ function updateAuthUI() {
   const adminControls = document.getElementById('adminControls');
   const sessionInfo = document.getElementById('sessionInfo');
 
+  const mergeBtn = document.getElementById('mergeItemsBtn');
   if (state.isAdmin) {
     if (loginSection) loginSection.style.display = 'none';
     if (adminControls) adminControls.style.display = 'flex';
+    if (mergeBtn) mergeBtn.style.display = '';
     if (sessionInfo) {
       sessionInfo.style.display = 'flex';
       const left = AUTH.getSessionTimeLeft();
@@ -149,6 +151,7 @@ function updateAuthUI() {
   } else {
     if (loginSection) loginSection.style.display = 'flex';
     if (adminControls) adminControls.style.display = 'none';
+    if (mergeBtn) mergeBtn.style.display = 'none';
     if (sessionInfo) sessionInfo.style.display = 'none';
   }
   renderLogPanel();
@@ -1410,6 +1413,10 @@ function setupModals() {
   // 전체 재고 초기화
   const resetInventoryBtn = document.getElementById('resetInventoryBtn');
   if (resetInventoryBtn) resetInventoryBtn.addEventListener('click', confirmResetInventory);
+
+  // 중복 항목 합치기
+  const mergeItemsBtn = document.getElementById('mergeItemsBtn');
+  if (mergeItemsBtn) mergeItemsBtn.addEventListener('click', mergeIdenticalItems);
 }
 
 function confirmResetInventory() {
@@ -1437,6 +1444,37 @@ function confirmResetInventory() {
   saveInventory(state.items);
   renderAll();
   showToast(`${state.items.length}개 항목의 재고가 초기화되었습니다.`, 'success');
+}
+
+function mergeIdenticalItems() {
+  const keyOf = item =>
+    `${item.code ?? ''}__${(item.name || '').trim()}__${(item.expiryRaw || '').trim()}`;
+
+  const map = new Map();
+  let dupCount = 0;
+
+  state.items.forEach(item => {
+    const k = keyOf(item);
+    if (map.has(k)) {
+      const base = map.get(k);
+      base.stockBoxes  = (base.stockBoxes  || 0) + (item.stockBoxes  || 0);
+      base.unitQty     = (base.unitQty     || 0) + (item.unitQty     || 0);
+      base.totalStock  = base.stockBoxes * (base.boxQty || 1) + base.unitQty;
+      dupCount++;
+    } else {
+      map.set(k, { ...item });
+    }
+  });
+
+  if (dupCount === 0) {
+    showToast('중복 항목이 없습니다.', 'success');
+    return;
+  }
+
+  state.items = Array.from(map.values());
+  saveInventory(state.items);
+  renderAll();
+  showToast(`${dupCount}개 중복 항목을 합쳤습니다.`, 'success');
 }
 
 // ─── 삭제 확인 ────────────────────────────────────────────────────────────────

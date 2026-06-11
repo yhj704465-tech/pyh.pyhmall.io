@@ -449,6 +449,15 @@ body {
   color: var(--text-sub);
   font-weight: 500;
 }
+.btn-merge-items {
+  font-size: 12px; font-weight: 600;
+  padding: 4px 10px; border-radius: 6px;
+  background: rgba(99,102,241,0.1); color: #818cf8;
+  border: 1px solid rgba(99,102,241,0.25);
+  cursor: pointer; transition: all 0.15s; font-family: inherit;
+  white-space: nowrap;
+}
+.btn-merge-items:hover { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.5); }
 
 /* ── 인벤토리 컨테이너 ────────────────────────────────── */
 #inventoryContainer {
