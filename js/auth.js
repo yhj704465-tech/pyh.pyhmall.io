@@ -1,16 +1,19 @@
 // auth.js - JWT 인증 관리 (Web Crypto API 사용)
-// 주의: 정적 사이트이므로 시크릿 키가 클라이언트에 노출됩니다.
-// 내부 창고 관리 용도로만 사용하세요.
+// 민감값(SECRET, ADMIN_ID, ADMIN_PW_HASH)은 GitHub Actions 빌드 시 주입됩니다.
+// 소스 코드에 평문 비밀번호가 없습니다.
 
 const AUTH = (() => {
-  const SECRET = 'pyhmal-warehouse-2026-secret-key';
+  // ⚠️ 아래 값은 GitHub Actions 빌드 시 실제 값으로 교체됩니다 (플레이스홀더)
+  const SECRET   = '%%JWT_SECRET%%';
+  const ADMIN_ID = '%%ADMIN_ID%%';
+  const ADMIN_PW_HASH = '%%ADMIN_PW_HASH%%'; // SHA-256(비밀번호) hex 문자열
+
   const TOKEN_KEY = 'warehouse_token';
   const EXPIRY_MS = 4 * 60 * 60 * 1000; // 4시간
 
   const ADMIN = {
-    id: 'pyh0731',
-    // SHA-256 hash of '!yh2026' - 평문 비교 대신 해시 비교 사용
-    passwordHash: '5e8e2ee9a9b6e9c2e8f3d1a7b4c5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3'
+    id: ADMIN_ID,
+    passwordHash: ADMIN_PW_HASH
   };
 
   // 간단한 base64url 인코딩/디코딩
@@ -74,10 +77,17 @@ const AUTH = (() => {
     }
   }
 
-  // 로그인 시도
+  // SHA-256 해시 계산
+  async function sha256hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // 로그인 시도 (비밀번호는 SHA-256 해시로 비교)
   async function login(id, password) {
     if (id !== ADMIN.id) return false;
-    if (password !== '!yh2026') return false;
+    const hash = await sha256hex(password);
+    if (hash !== ADMIN.passwordHash) return false;
 
     const token = await createToken(id);
     localStorage.setItem(TOKEN_KEY, token);

@@ -1,0 +1,52 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 비밀번호 SHA-256 해시 계산 (GitHub Secret 평문 → 해시값)
+      - name: Compute password hash
+        id: hash
+        run: |
+          PW_HASH=$(echo -n "${{ secrets.ADMIN_PASSWORD }}" | sha256sum | awk '{print $1}')
+          echo "pw_hash=$PW_HASH" >> $GITHUB_OUTPUT
+
+      # auth.js 플레이스홀더 → 실제 값으로 교체
+      - name: Inject secrets into auth.js
+        run: |
+          sed -i "s|%%JWT_SECRET%%|${{ secrets.JWT_SECRET }}|g"     js/auth.js
+          sed -i "s|%%ADMIN_ID%%|${{ secrets.ADMIN_ID }}|g"         js/auth.js
+          sed -i "s|%%ADMIN_PW_HASH%%|${{ steps.hash.outputs.pw_hash }}|g" js/auth.js
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
