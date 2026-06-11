@@ -288,6 +288,30 @@ function doConfirmedAdd() {
   showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
 }
 
+// ─── 소비기한 편집용 정규화 ───────────────────────────────────────────────────
+// 수정 폼에 표시하기 전 엑셀 일련번호를 YYYY-MM-DD 로 변환
+
+function normalizeExpiryForEdit(raw) {
+  if (!raw) return '';
+  const t = raw.trim();
+
+  // 순수 정수 → 엑셀 시리얼 변환
+  if (/^\d+$/.test(t)) {
+    const n = parseInt(t);
+    if (n > 40000) return formatDate(excelSerialToDate(n));
+  }
+
+  // 쉼표 구분 다중 날짜 중 모두 엑셀 시리얼인 경우
+  if (t.includes(',')) {
+    const parts = t.split(',').map(s => s.trim());
+    if (parts.every(p => /^\d+$/.test(p) && parseInt(p) > 40000)) {
+      return parts.map(p => formatDate(excelSerialToDate(parseInt(p)))).join(',');
+    }
+  }
+
+  return raw;
+}
+
 // ─── 출고 물품 처리 ──────────────────────────────────────────────────────────
 
 function fuzzyMatchBest(query) {
@@ -808,7 +832,7 @@ function openEditModal(id) {
   document.getElementById('editStockBoxes').value = item.stockBoxes || 0;
   document.getElementById('editUnitQty').value = item.unitQty || 0;
   document.getElementById('editBoxQty').value = item.boxQty || 1;
-  document.getElementById('editExpiryRaw').value = item.expiryRaw || '';
+  document.getElementById('editExpiryRaw').value = normalizeExpiryForEdit(item.expiryRaw || '');
   document.getElementById('editExpiryPeriod').value = item.expiryPeriod || '';
 
   modal.style.display = 'flex';
