@@ -323,10 +323,26 @@ function triggerExcelImport() {
 }
 
 function parseExcelRow(row) {
-  function col(...names) {
-    for (const n of names) {
-      const v = row[n];
+  const rowKeys = Object.keys(row);
+  const norm = s => s.replace(/[\s\r\n\[\]()\（）*]/g, '').toLowerCase();
+
+  function col(...aliases) {
+    // 1. 정확한 컬럼명 매칭
+    for (const a of aliases) {
+      const v = row[a];
       if (v !== undefined && v !== null && v !== '') return v;
+    }
+    // 2. 공백·개행·괄호 제거 후 접두사 포함 매칭
+    for (const a of aliases) {
+      const na = norm(a);
+      if (!na) continue;
+      for (const k of rowKeys) {
+        const nk = norm(k);
+        if (nk === na || nk.startsWith(na) || na.startsWith(nk)) {
+          const v = row[k];
+          if (v !== undefined && v !== null && v !== '') return v;
+        }
+      }
     }
     return '';
   }
@@ -336,10 +352,10 @@ function parseExcelRow(row) {
   if (!name) return null;
 
   const code       = codeVal !== '' ? (parseInt(codeVal) || null) : null;
-  const stockBoxes = parseInt(col('실재고(박스)', '박스', '실재고', 'stockBoxes')) || 0;
+  const stockBoxes = parseInt(col('실재고(박스)', '실재고', '박스', 'stockBoxes')) || 0;
   const unitQty    = parseInt(col('낱개수량', '낱개', 'unitQty')) || 0;
-  const boxQty     = Math.max(1, parseInt(col('박스당수량', '박스당', 'boxQty')) || 1);
-  const expiryPeriod = String(col('소비기한기간', '기간', 'expiryPeriod') || '').trim();
+  const boxQty     = Math.max(1, parseInt(col('박스당수량', 'Box수량', '박스당', 'boxQty')) || 1);
+  const expiryPeriod = String(col('소비기한기간', '소비기한년수', '기간', 'expiryPeriod') || '').trim();
 
   let expiryRaw = '';
   const rawExp = col('소비기한', '유통기한', 'expiryRaw');
@@ -1397,13 +1413,30 @@ function setupModals() {
 }
 
 function confirmResetInventory() {
-  if (!confirm(`⚠️ 전체 재고를 초기화하시겠습니까?\n\n현재 등록된 ${state.items.length}개 항목이 모두 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
-  state.items = [];
+  if (!confirm(`⚠️ 재고 수량 및 소비기한을 초기화하시겠습니까?\n\n물품 목록은 유지되며, 수량이 0으로·소비기한이 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+
+  // 수량·소비기한 초기화
+  state.items.forEach(item => {
+    item.stockBoxes   = 0;
+    item.unitQty      = 0;
+    item.totalStock   = 0;
+    item.expiryRaw    = '';
+    item.expiryPeriod = '';
+    item.hasMulti     = false;
+  });
+
+  // 같은 코드의 중복 로트 제거 (소비기한 삭제로 구분 불필요)
+  const seen = new Set();
+  state.items = state.items.filter(item => {
+    if (!item.code) return true;
+    if (seen.has(item.code)) return false;
+    seen.add(item.code);
+    return true;
+  });
+
   saveInventory(state.items);
-  localStorage.removeItem(LOG_KEY);
-  localStorage.removeItem(OUT_LOG_KEY);
   renderAll();
-  showToast('전체 재고가 초기화되었습니다.', 'success');
+  showToast(`${state.items.length}개 항목의 재고가 초기화되었습니다.`, 'success');
 }
 
 // ─── 삭제 확인 ────────────────────────────────────────────────────────────────

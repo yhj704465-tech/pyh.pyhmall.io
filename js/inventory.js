@@ -203,12 +203,12 @@ function getExpiryBadge(expiryInfo) {
 function loadInventory() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) return data; // 빈 배열도 명시적으로 저장된 상태로 존중
     }
   } catch {}
-  // 초기 데이터로 초기화
+  // localStorage에 키 자체가 없을 때만 초기 데이터 사용
   const initial = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
   saveInventory(initial);
   return initial;
