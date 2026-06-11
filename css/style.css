@@ -1143,6 +1143,162 @@ textarea.form-input {
   .log-panel { display: none !important; }
 }
 
+/* ── 출고 랭킹 패널 ────────────────────────────────────── */
+.top-panel {
+  width: 252px;
+  flex-shrink: 0;
+  margin-right: 16px;
+  position: sticky;
+  top: 16px;
+  align-self: flex-start;
+  background: linear-gradient(160deg, #0d1b3e 0%, #1a0d35 55%, #0b1421 100%);
+  border-radius: 20px;
+  border: 1px solid rgba(139,92,246,.28);
+  overflow: hidden;
+  display: none;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  box-shadow:
+    0 0 0 1px rgba(139,92,246,.08),
+    0 0 40px rgba(124,58,237,.14),
+    0 8px 32px rgba(0,0,0,.45);
+}
+.top-panel::-webkit-scrollbar { display: none; }
+.top-panel.visible { display: flex; flex-direction: column; }
+@media (max-width: 1500px) { .top-panel.visible { display: none; } }
+
+/* 헤더 */
+.top-panel-header {
+  padding: 20px 20px 15px;
+  background: linear-gradient(180deg, rgba(139,92,246,.18) 0%, transparent 100%);
+  position: relative;
+}
+.top-panel-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 16px; right: 16px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(139,92,246,.55), transparent);
+}
+.tp-crown { font-size: 26px; margin-bottom: 2px; filter: drop-shadow(0 0 8px rgba(251,191,36,.5)); }
+.tp-title {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -.5px;
+  line-height: 1.2;
+}
+.tp-sub {
+  display: inline-block;
+  margin-top: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #a78bfa;
+  background: rgba(139,92,246,.14);
+  border: 1px solid rgba(139,92,246,.32);
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+/* 목록 */
+.top-list { padding: 14px 15px 18px; display: flex; flex-direction: column; gap: 11px; }
+
+.top-item {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  animation: tpItemIn 0.45s ease both;
+}
+@keyframes tpItemIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* 순위 뱃지 */
+.tp-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 900;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.tp-rank-1 {
+  background: linear-gradient(135deg, #fbbf24, #d97706);
+  color: #1a0d00;
+  box-shadow: 0 0 14px rgba(251,191,36,.45);
+}
+.tp-rank-2 {
+  background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+  color: #1e293b;
+  box-shadow: 0 0 8px rgba(148,163,184,.25);
+}
+.tp-rank-3 {
+  background: linear-gradient(135deg, #fb923c, #b45309);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(251,146,60,.35);
+}
+.tp-rank-n {
+  background: rgba(255,255,255,.07);
+  color: rgba(255,255,255,.38);
+  font-size: 11px;
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+/* 정보 영역 */
+.tp-info { flex: 1; min-width: 0; }
+.tp-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,.88);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+  line-height: 1.35;
+}
+
+/* 바 차트 */
+.tp-bar-row { display: flex; align-items: center; gap: 7px; }
+.tp-bar-track {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.tp-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  animation: tpBarGrow 0.9s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes tpBarGrow { from { width: 0 !important; } }
+.tp-fill-1 { background: linear-gradient(90deg,#f59e0b,#fde68a); box-shadow: 0 0 6px rgba(245,158,11,.5); }
+.tp-fill-2 { background: linear-gradient(90deg,#94a3b8,#e2e8f0); }
+.tp-fill-3 { background: linear-gradient(90deg,#f97316,#fbbf24); box-shadow: 0 0 5px rgba(249,115,22,.35); }
+.tp-fill-n { background: linear-gradient(90deg,#7c3aed,#06b6d4); }
+
+.tp-qty {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(167,139,250,.9);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* 빈 상태 */
+.top-empty { text-align: center; padding: 30px 14px; color: rgba(255,255,255,.28); }
+.top-empty-icon { font-size: 34px; margin-bottom: 10px; opacity: .6; }
+.top-empty-text { font-size: 12px; line-height: 1.7; }
+
 /* ── 다운로드 드롭다운 ─────────────────────────────────── */
 .dl-wrap { position: relative; display: inline-block; }
 .dl-dropdown {

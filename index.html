@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611m">
+  <link rel="stylesheet" href="css/style.css?v=20260611n">
 </head>
 <body>
 
@@ -60,6 +60,16 @@
 
 <!-- ─── 본문 레이아웃 ──────────────────────────────────── -->
 <div class="layout-wrapper">
+
+<!-- ─── 출고 랭킹 패널 (왼쪽) ──────────────────────────── -->
+<aside id="topPanel" class="top-panel">
+  <div class="top-panel-header">
+    <div class="tp-crown">🏆</div>
+    <span class="tp-title">출고 랭킹</span>
+    <span class="tp-sub" id="topPanelSub">최근 30일</span>
+  </div>
+  <div id="topList" class="top-list"></div>
+</aside>
 
 <!-- ─── 메인 컨테이너 ──────────────────────────────────── -->
 <main class="main-container">
@@ -318,10 +328,10 @@
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="js/data.js?v=20260611m"></script>
-<script src="js/auth.js?v=20260611m"></script>
-<script src="js/inventory.js?v=20260611m"></script>
-<script src="js/app.js?v=20260611m"></script>
+<script src="js/data.js?v=20260611n"></script>
+<script src="js/auth.js?v=20260611n"></script>
+<script src="js/inventory.js?v=20260611n"></script>
+<script src="js/app.js?v=20260611n"></script>
 
 </body>
 </html>

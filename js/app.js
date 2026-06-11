@@ -12,6 +12,7 @@ let state = {
 
 const LOG_KEY = 'warehouse_log';
 const MAX_LOG_ENTRIES = 30;
+const OUT_LOG_KEY = 'warehouse_out_log';
 
 let _pendingAddItems = null;
 let _outgoingLines = null;
@@ -589,11 +590,100 @@ function doConfirmedOutgoing() {
     ? toProcess[0].matched.name
     : `${toProcess[0].matched.name} 외 ${toProcess.length - 1}개`;
   addLogEntry('out', label, { snapshots });
+  saveOutgoingRecord(_outgoingLines);
 
   _outgoingLines = null;
   closeModal('outgoingModal');
   renderAll();
   showToast(`${toProcess.length}개 항목이 출고되었습니다.`, 'success');
+}
+
+// ─── 출고 기록 (TOP10 분석용) ─────────────────────────────────────────────────
+
+function saveOutgoingRecord(lines) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(OUT_LOG_KEY) || '[]');
+    const entry = {
+      time: new Date().toISOString(),
+      items: lines
+        .filter(l => l.matched && !l.skipped)
+        .map(l => ({
+          code: l.matched.code,
+          name: l.matched.name,
+          total: l.stockBoxes * (l.matched.boxQty || 1) + l.unitQty,
+        }))
+    };
+    if (entry.items.length === 0) return;
+    stored.push(entry);
+    // 90일 이상 오래된 기록 정리
+    const cutoff = Date.now() - 90 * 24 * 3600 * 1000;
+    localStorage.setItem(OUT_LOG_KEY, JSON.stringify(stored.filter(r => new Date(r.time) >= cutoff)));
+  } catch {}
+}
+
+function getTopOutgoing(days = 30) {
+  try {
+    const stored = JSON.parse(localStorage.getItem(OUT_LOG_KEY) || '[]');
+    const cutoff = Date.now() - days * 24 * 3600 * 1000;
+    const recent = stored.filter(r => new Date(r.time) >= cutoff);
+    const totals = new Map();
+    for (const rec of recent) {
+      for (const item of rec.items) {
+        if (!totals.has(item.code))
+          totals.set(item.code, { code: item.code, name: item.name, total: 0 });
+        totals.get(item.code).total += item.total;
+      }
+    }
+    const top = [...totals.values()].sort((a, b) => b.total - a.total).slice(0, 10);
+    return { top, opCount: recent.length };
+  } catch { return { top: [], opCount: 0 }; }
+}
+
+function renderTopPanel() {
+  const panel = document.getElementById('topPanel');
+  const listEl = document.getElementById('topList');
+  const subEl  = document.getElementById('topPanelSub');
+  if (!panel || !listEl) return;
+
+  if (!state.isAdmin) { panel.classList.remove('visible'); return; }
+  panel.classList.add('visible');
+
+  const { top, opCount } = getTopOutgoing(30);
+  if (subEl) subEl.textContent = opCount > 0 ? `최근 30일 · ${opCount}회` : '최근 30일';
+
+  if (top.length === 0) {
+    listEl.innerHTML = `<div class="top-empty">
+      <div class="top-empty-icon">📦</div>
+      <div class="top-empty-text">출고 기록이 없습니다<br>출고 후 여기서 확인하세요</div>
+    </div>`;
+    return;
+  }
+
+  const RANK_BADGE = ['tp-rank-1','tp-rank-2','tp-rank-3'];
+  const BAR_FILL   = ['tp-fill-1','tp-fill-2','tp-fill-3'];
+  const RANK_ICON  = ['🥇','🥈','🥉'];
+  const maxTotal   = top[0].total;
+
+  listEl.innerHTML = top.map((item, idx) => {
+    const rank   = idx + 1;
+    const pct    = Math.max(7, Math.round((item.total / maxTotal) * 100));
+    const delay  = (idx * 0.07).toFixed(2);
+    const badgeCls = RANK_BADGE[idx] || 'tp-rank-n';
+    const barCls   = BAR_FILL[idx]   || 'tp-fill-n';
+    const rankLbl  = rank <= 3 ? RANK_ICON[idx] : rank;
+    return `<div class="top-item" style="animation-delay:${delay}s">
+      <div class="tp-rank ${badgeCls}">${rankLbl}</div>
+      <div class="tp-info">
+        <span class="tp-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</span>
+        <div class="tp-bar-row">
+          <div class="tp-bar-track">
+            <div class="tp-bar-fill ${barCls}" style="width:${pct}%;animation-delay:${delay}s"></div>
+          </div>
+          <span class="tp-qty">${item.total.toLocaleString()}개</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ─── 품목 축약어 퍼지 검색 ────────────────────────────────────────────────────
@@ -621,6 +711,7 @@ function renderAll() {
   renderInventoryTable();
   renderExpirySoonBanner();
   renderLogPanel();
+  renderTopPanel();
   // 비로그인 시 검색/필터/테이블헤더 숨김
   const controlBar = document.querySelector('.control-bar');
   const tableHeader = document.querySelector('.table-header');
