@@ -14,6 +14,8 @@ const LOG_KEY = 'warehouse_log';
 const MAX_LOG_ENTRIES = 30;
 
 let _pendingAddItems = null;
+let _pendingAddStockItems = null;
+let _addStockSelected = [];
 
 // ─── 초기화 ──────────────────────────────────────────────────────────────────
 
@@ -218,36 +220,6 @@ function renderAutocomplete(suggestions, dropdown, input) {
   });
 }
 
-// ─── 추가 항목 보강 (코드 자동매칭 + 소비기한 자동채움) ─────────────────────
-
-function enrichParsedItems(parsed) {
-  return parsed.map(entry => {
-    const result = { ...entry };
-
-    // 코드 없으면 품명으로 기존 항목 매칭 시도
-    if (!result.code) {
-      const nameNorm = (result.name || '').trim().toLowerCase();
-      const match = state.items.find(i => (i.name || '').trim().toLowerCase() === nameNorm);
-      if (match) result.code = match.code;
-    }
-
-    // 소비기한 없으면 같은 코드 기존 재고 중 가장 빠른 날짜로
-    if (!result.expiryRaw && result.code) {
-      const existing = state.items.filter(i => i.code === result.code);
-      const withExpiry = existing
-        .map(i => ({ raw: i.expiryRaw, info: parseExpiry(i.expiryRaw, i.expiryPeriod) }))
-        .filter(x => x.info.daysLeft !== null && x.info.daysLeft >= 0)
-        .sort((a, b) => a.info.daysLeft - b.info.daysLeft);
-      if (withExpiry.length > 0) {
-        result.expiryRaw = withExpiry[0].raw;
-        result._autoExpiry = true;
-      }
-    }
-
-    return result;
-  });
-}
-
 function formatAddQty(entry) {
   const parts = [];
   if (entry.stockBoxes > 0) parts.push(`${entry.stockBoxes}박스`);
@@ -257,24 +229,27 @@ function formatAddQty(entry) {
 
 function showAddConfirm() {
   const text = document.getElementById('addText').value;
-  const rawParsed = parseTextBlock(text);
-  if (rawParsed.length === 0) {
+  const parsed = parseTextBlock(text);
+  if (parsed.length === 0) {
     showToast('추가할 항목이 없습니다.', 'error');
     return;
   }
 
-  const enriched = enrichParsedItems(rawParsed);
-  _pendingAddItems = enriched;
+  // 코드 필수 검증
+  const noCode = parsed.filter(e => !e.code);
+  if (noCode.length > 0) {
+    showToast(`품목코드가 없는 항목이 있습니다: ${noCode.map(e => e.name).join(', ')}`, 'error');
+    return;
+  }
 
-  const rows = enriched.map(e => {
-    const codeCell = e.code
-      ? `<span>${e.code}</span>`
-      : `<span class="auto-code">자동</span>`;
+  _pendingAddItems = parsed;
+
+  const rows = parsed.map(e => {
     const expCell = e.expiryRaw
-      ? `${escapeHtml(e.expiryRaw)}${e._autoExpiry ? ' <span class="auto-expiry">(기존 기준)</span>' : ''}`
+      ? escapeHtml(e.expiryRaw)
       : `<span class="no-expiry">없음</span>`;
     return `<tr>
-      <td class="ct-code">${codeCell}</td>
+      <td class="ct-code">${e.code}</td>
       <td class="ct-name">${escapeHtml(e.name)}</td>
       <td class="ct-qty">${formatAddQty(e)}</td>
       <td class="ct-exp">${expCell}</td>
@@ -292,7 +267,7 @@ function showAddConfirm() {
   document.getElementById('addFooter1').style.display = 'none';
   document.getElementById('addFooter2').style.display = 'flex';
   const title = document.querySelector('#addModal .modal-title');
-  if (title) title.textContent = `${enriched.length}개 항목 — 등록 확인`;
+  if (title) title.textContent = `${parsed.length}개 항목 — 등록 확인`;
 }
 
 function doConfirmedAdd() {
@@ -309,6 +284,155 @@ function doConfirmedAdd() {
 
   _pendingAddItems = null;
   closeModal('addModal');
+  renderAll();
+  showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
+}
+
+// ─── 기존 물품 재고 추가 ──────────────────────────────────────────────────────
+
+function openAddStockModal() {
+  const modal = document.getElementById('addStockModal');
+  if (!modal) return;
+  _addStockSelected = [];
+  _pendingAddStockItems = null;
+  const si = document.getElementById('addStockSearch');
+  const sl = document.getElementById('addStockSearchList');
+  if (si) si.value = '';
+  if (sl) { sl.innerHTML = ''; sl.classList.remove('open'); }
+  document.getElementById('addStockInputView').style.display = 'block';
+  document.getElementById('addStockConfirmView').style.display = 'none';
+  document.getElementById('addStockFooter1').style.display = 'flex';
+  document.getElementById('addStockFooter2').style.display = 'none';
+  const title = modal.querySelector('.modal-title');
+  if (title) title.textContent = '기존 물품에 재고 추가';
+  renderAddStockList();
+  modal.style.display = 'flex';
+}
+
+function renderAddStockList() {
+  const listEl = document.getElementById('addStockSelectedList');
+  if (!listEl) return;
+
+  if (_addStockSelected.length === 0) {
+    listEl.innerHTML = '<p class="add-stock-hint">위에서 물품을 검색해 선택하세요</p>';
+    return;
+  }
+
+  listEl.innerHTML = _addStockSelected.map((item, idx) => `
+    <div class="add-stock-row">
+      <div class="asr-header">
+        <div class="asr-info">
+          <span class="asr-code">${item.code}</span>
+          <span class="asr-name">${escapeHtml(item.name)}</span>
+        </div>
+        <button type="button" class="asr-remove" data-idx="${idx}" title="제거">✕</button>
+      </div>
+      <div class="asr-inputs">
+        <input type="text" class="asr-qty form-input" data-idx="${idx}"
+               placeholder="수량 (예: 3박스, 50개)" value="${escapeHtml(item.qtyStr || '')}">
+        <input type="text" class="asr-expiry form-input" data-idx="${idx}"
+               placeholder="소비기한 (생략 시 기존 기준)" value="${escapeHtml(item.expiryStr || '')}">
+      </div>
+    </div>`
+  ).join('');
+
+  listEl.querySelectorAll('.asr-qty').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = parseInt(inp.dataset.idx);
+      if (_addStockSelected[i]) _addStockSelected[i].qtyStr = inp.value;
+    });
+  });
+  listEl.querySelectorAll('.asr-expiry').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const i = parseInt(inp.dataset.idx);
+      if (_addStockSelected[i]) _addStockSelected[i].expiryStr = inp.value;
+    });
+  });
+  listEl.querySelectorAll('.asr-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _addStockSelected.splice(parseInt(btn.dataset.idx), 1);
+      renderAddStockList();
+    });
+  });
+}
+
+function showAddStockConfirm() {
+  // 입력값 최종 수집 (포커스 유지 상태에서 놓친 경우 대비)
+  const listEl = document.getElementById('addStockSelectedList');
+  if (listEl) {
+    listEl.querySelectorAll('.asr-qty').forEach(inp => {
+      const i = parseInt(inp.dataset.idx);
+      if (_addStockSelected[i]) _addStockSelected[i].qtyStr = inp.value;
+    });
+    listEl.querySelectorAll('.asr-expiry').forEach(inp => {
+      const i = parseInt(inp.dataset.idx);
+      if (_addStockSelected[i]) _addStockSelected[i].expiryStr = inp.value;
+    });
+  }
+
+  if (_addStockSelected.length === 0) {
+    showToast('추가할 물품을 선택해주세요.', 'error');
+    return;
+  }
+  const noQty = _addStockSelected.filter(s => !s.qtyStr.trim());
+  if (noQty.length > 0) {
+    showToast(`수량을 입력해주세요: ${noQty.map(s => s.name).join(', ')}`, 'error');
+    return;
+  }
+
+  _pendingAddStockItems = _addStockSelected.map(item => {
+    const parsed = parseTextEntry(`${item.code}/${item.name}/${item.qtyStr}/${item.expiryStr || ''}`);
+    if (!parsed) return null;
+    // 소비기한 생략 시 기존 재고 중 가장 빠른 날짜 자동 적용
+    if (!parsed.expiryRaw) {
+      const withExpiry = state.items
+        .filter(i => i.code === parsed.code)
+        .map(i => ({ raw: i.expiryRaw, info: parseExpiry(i.expiryRaw, i.expiryPeriod) }))
+        .filter(x => x.info.daysLeft !== null && x.info.daysLeft >= 0)
+        .sort((a, b) => a.info.daysLeft - b.info.daysLeft);
+      if (withExpiry.length > 0) { parsed.expiryRaw = withExpiry[0].raw; parsed._autoExpiry = true; }
+    }
+    return parsed;
+  }).filter(Boolean);
+
+  const rows = _pendingAddStockItems.map(e => {
+    const expCell = e.expiryRaw
+      ? `${escapeHtml(e.expiryRaw)}${e._autoExpiry ? ' <span class="auto-expiry">(기존 기준)</span>' : ''}`
+      : `<span class="no-expiry">없음</span>`;
+    return `<tr>
+      <td class="ct-code">${e.code}</td>
+      <td class="ct-name">${escapeHtml(e.name)}</td>
+      <td class="ct-qty">${formatAddQty(e)}</td>
+      <td class="ct-exp">${expCell}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('addStockConfirmTable').innerHTML = `
+    <table class="confirm-table">
+      <thead><tr><th>코드</th><th>품명</th><th>수량</th><th>소비기한</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById('addStockInputView').style.display = 'none';
+  document.getElementById('addStockConfirmView').style.display = 'block';
+  document.getElementById('addStockFooter1').style.display = 'none';
+  document.getElementById('addStockFooter2').style.display = 'flex';
+  const title = document.querySelector('#addStockModal .modal-title');
+  if (title) title.textContent = `${_pendingAddStockItems.length}개 항목 — 등록 확인`;
+}
+
+function doConfirmedAddStock() {
+  if (!_pendingAddStockItems || _pendingAddStockItems.length === 0) return;
+  const beforeIds = new Set(state.items.map(i => i.id));
+  addItems(state.items, _pendingAddStockItems);
+  const addedIds = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
+  const label = _pendingAddStockItems.length === 1
+    ? _pendingAddStockItems[0].name
+    : `${_pendingAddStockItems[0].name} 외 ${_pendingAddStockItems.length - 1}개`;
+  saveInventory(state.items);
+  addLogEntry('add', label, { ids: addedIds });
+  _pendingAddStockItems = null;
+  closeModal('addStockModal');
   renderAll();
   showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
 }
@@ -594,10 +718,6 @@ function openAddModal() {
   if (!modal) return;
   document.getElementById('addText').value = '';
   document.getElementById('addResult').innerHTML = '';
-  const qi = document.getElementById('quickSearchInput');
-  const ql = document.getElementById('quickSearchList');
-  if (qi) qi.value = '';
-  if (ql) { ql.innerHTML = ''; ql.classList.remove('open'); }
   // Step 1로 초기화
   document.getElementById('addInputView').style.display = 'block';
   document.getElementById('addConfirmView').style.display = 'none';
@@ -645,58 +765,82 @@ function setupModals() {
         expiryPeriod: document.getElementById('editExpiryPeriod').value.trim(),
       };
       const beforeItem = { ...state.items.find(i => i.id === id) };
-      updateItem(state.items, id, updates);
-      saveInventory(state.items);
-      addLogEntry('edit', beforeItem.name || `항목 #${id}`, { before: beforeItem });
+      const hasChanged =
+        beforeItem.code !== updates.code ||
+        beforeItem.name !== updates.name ||
+        beforeItem.stockBoxes !== updates.stockBoxes ||
+        beforeItem.unitQty !== updates.unitQty ||
+        beforeItem.boxQty !== updates.boxQty ||
+        (beforeItem.expiryRaw || '') !== (updates.expiryRaw || '') ||
+        (beforeItem.expiryPeriod || '') !== (updates.expiryPeriod || '');
+      if (hasChanged) {
+        updateItem(state.items, id, updates);
+        saveInventory(state.items);
+        addLogEntry('edit', beforeItem.name || `항목 #${id}`, { before: beforeItem });
+      }
       closeModal('editModal');
-      renderAll();
-      showToast('수정되었습니다.', 'success');
+      if (hasChanged) { renderAll(); showToast('수정되었습니다.', 'success'); }
+      else showToast('변경사항이 없습니다.', 'info');
     });
   }
 
-  // 추가 모달 — 품목 빠른 검색
-  const qInput = document.getElementById('quickSearchInput');
-  const qList  = document.getElementById('quickSearchList');
-  if (qInput && qList) {
-    qInput.addEventListener('input', () => {
-      const q = qInput.value;
-      if (!q.trim()) { qList.classList.remove('open'); qList.innerHTML = ''; return; }
-
+  // 기존 물품 모달 — 검색
+  const si = document.getElementById('addStockSearch');
+  const sl = document.getElementById('addStockSearchList');
+  if (si && sl) {
+    si.addEventListener('input', () => {
+      const q = si.value;
+      if (!q.trim()) { sl.classList.remove('open'); sl.innerHTML = ''; return; }
       const hits = fuzzyMatchItems(q);
       if (hits.length === 0) {
-        qList.innerHTML = '<li class="qs-no-result">검색 결과 없음</li>';
+        sl.innerHTML = '<li class="qs-no-result">검색 결과 없음</li>';
       } else {
-        qList.innerHTML = hits.map(item =>
+        sl.innerHTML = hits.map(item =>
           `<li class="qs-item" data-code="${item.code}" data-name="${escapeHtml(item.name)}">
             <span class="qs-code">${item.code}</span>
             <span class="qs-name">${escapeHtml(item.name)}</span>
             <span class="qs-stock">${(item.totalStock||0).toLocaleString()}개</span>
           </li>`
         ).join('');
-        qList.querySelectorAll('.qs-item').forEach(el => {
+        sl.querySelectorAll('.qs-item').forEach(el => {
           el.addEventListener('click', () => {
-            const line = `${el.dataset.code}/${el.dataset.name}/`;
-            const ta = document.getElementById('addText');
-            if (ta) {
-              ta.value = ta.value ? ta.value + '\n' + line : line;
-              ta.dispatchEvent(new Event('input'));
-              ta.focus();
-              ta.setSelectionRange(ta.value.length, ta.value.length);
+            const code = parseInt(el.dataset.code);
+            if (_addStockSelected.find(s => s.code === code)) {
+              showToast('이미 선택된 항목입니다.', 'info');
+            } else {
+              _addStockSelected.push({ code, name: el.dataset.name, qtyStr: '', expiryStr: '' });
+              renderAddStockList();
             }
-            qInput.value = '';
-            qList.classList.remove('open');
-            qList.innerHTML = '';
-            showToast('수량과 소비기한을 이어서 입력해주세요.', 'info');
+            si.value = ''; sl.classList.remove('open'); sl.innerHTML = '';
           });
         });
       }
-      qList.classList.add('open');
+      sl.classList.add('open');
     });
-
     document.addEventListener('click', (e) => {
-      if (!e.target.closest('.quick-search-wrap')) qList.classList.remove('open');
+      if (!e.target.closest('#addStockModal')) sl.classList.remove('open');
     });
   }
+
+  // 기존 물품 모달 — 다음/수정/등록 버튼
+  const addStockPreviewBtn = document.getElementById('addStockPreviewBtn');
+  if (addStockPreviewBtn) addStockPreviewBtn.addEventListener('click', showAddStockConfirm);
+
+  const addStockBackBtn = document.getElementById('addStockBackBtn');
+  if (addStockBackBtn) {
+    addStockBackBtn.addEventListener('click', () => {
+      document.getElementById('addStockInputView').style.display = 'block';
+      document.getElementById('addStockConfirmView').style.display = 'none';
+      document.getElementById('addStockFooter1').style.display = 'flex';
+      document.getElementById('addStockFooter2').style.display = 'none';
+      const title = document.querySelector('#addStockModal .modal-title');
+      if (title) title.textContent = '기존 물품에 재고 추가';
+      _pendingAddStockItems = null;
+    });
+  }
+
+  const addStockConfirmBtn = document.getElementById('addStockConfirmBtn');
+  if (addStockConfirmBtn) addStockConfirmBtn.addEventListener('click', doConfirmedAddStock);
 
   // 추가 텍스트 미리보기
   const addText = document.getElementById('addText');
@@ -787,9 +931,13 @@ function setupGlobalEvents() {
     });
   }
 
-  // 추가 버튼
+  // 새 물품 추가 버튼
   const addBtn = document.getElementById('addItemBtn');
   if (addBtn) addBtn.addEventListener('click', openAddModal);
+
+  // 기존 물품 재고 추가 버튼
+  const addStockBtn = document.getElementById('addStockBtn');
+  if (addStockBtn) addStockBtn.addEventListener('click', openAddStockModal);
 
   // 소비기한 임박 필터 토글
   const expiringSoonBtn = document.getElementById('expiringSoonBtn');
@@ -973,8 +1121,18 @@ function revertLogEntry(logId) {
 
 // ─── DOM 준비 후 시작 ─────────────────────────────────────────────────────────
 
+function setupScrollTop() {
+  const btn = document.getElementById('scrollTopBtn');
+  if (!btn) return;
+  window.addEventListener('scroll', () => {
+    btn.classList.toggle('visible', window.scrollY > 320);
+  }, { passive: true });
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await init();
   setupModals();
   setupGlobalEvents();
+  setupScrollTop();
 });

@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611f">
+  <link rel="stylesheet" href="css/style.css?v=20260611g">
 </head>
 <body>
 
@@ -39,8 +39,9 @@
       <span id="sessionTimer">세션 240분 남음</span>
     </div>
     <div id="adminControls">
-      <button id="addItemBtn" class="btn btn-primary">➕ 추가</button>
-      <button id="exportBtn"  class="btn btn-outline">📥 CSV</button>
+      <button id="addItemBtn"  class="btn btn-primary">➕ 새 물품</button>
+      <button id="addStockBtn" class="btn btn-outline">📦 기존 물품</button>
+      <button id="exportBtn"   class="btn btn-outline">📥 CSV</button>
       <button id="logoutBtn" class="btn-logout">로그아웃</button>
     </div>
   </div>
@@ -211,49 +212,77 @@
   </div>
 </div>
 
-<!-- ─── 추가 모달 ──────────────────────────────────────── -->
+<!-- ─── 새 물품 추가 모달 ────────────────────────────────── -->
 <div id="addModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-header">
-      <span class="modal-title">재고 추가</span>
-      <button class="modal-close">✕</button>
+      <span class="modal-title">새로운 물품 추가</span>
+      <button class="modal-close" type="button">✕</button>
     </div>
     <div class="modal-body">
-
       <!-- Step 1: 입력 -->
       <div id="addInputView">
-        <div class="quick-search-wrap">
-          <label class="form-label">기존 품목 검색 (축약어 가능)</label>
-          <input type="text" id="quickSearchInput" class="form-input" placeholder="예: g7 100개입, 스위트칠리, 코코넛">
-          <ul id="quickSearchList" class="quick-search-list"></ul>
-        </div>
         <div class="add-hint">
           <strong>입력 형식</strong> (한 줄에 1개 항목, 엔터로 구분)<br>
-          <code>품명/수량/소비기한</code> 또는 <code>품목코드/품명/수량/소비기한</code><br><br>
+          <code>품목코드/품명/수량/소비기한</code> — 코드 필수<br><br>
           <strong>수량:</strong> <code>3박스</code> · <code>50개</code> · <code>3박스,5개</code><br>
-          <strong>소비기한:</strong> <code>2027-05-01</code> · <code>2025-03-10제조</code> · 생략 시 기존 재고 기준
+          <strong>소비기한:</strong> <code>2027-05-01</code> · <code>2025-03-10제조</code> · <code>혼적:날짜1,날짜2</code>
         </div>
         <div class="form-group">
           <label class="form-label" for="addText">항목 입력</label>
-          <textarea id="addText" class="form-input" placeholder="예시:&#10;G7 블랙 인스턴트커피 15개입/18박스/2027-06-01&#10;메프라놈 스위트칠리소스/50박스&#10;비엣코코 코코넛오일 200ml/30박스,6개/혼적:2026-08-01,2026-10-01"></textarea>
+          <textarea id="addText" class="form-input" placeholder="예시:&#10;500/신규브랜드 소스 500g/20박스/2027-08-01&#10;501/새제품 과자 100g/50박스,10개/2027-12-31"></textarea>
         </div>
         <div id="addResult"></div>
       </div>
-
       <!-- Step 2: 등록 확인 -->
       <div id="addConfirmView" style="display:none">
         <p class="confirm-question">아래 항목들을 등록하시겠습니까?</p>
         <div id="confirmItemsTable" class="confirm-table-wrap"></div>
       </div>
-
     </div>
     <div class="modal-footer" id="addFooter1">
-      <button class="btn btn-outline modal-close">취소</button>
-      <button class="btn btn-primary" id="addPreviewBtn">다음 →</button>
+      <button class="btn btn-outline modal-close" type="button">취소</button>
+      <button class="btn btn-primary" id="addPreviewBtn" type="button">다음 →</button>
     </div>
     <div class="modal-footer" id="addFooter2" style="display:none">
-      <button class="btn btn-outline" id="addBackBtn">← 수정</button>
-      <button class="btn btn-success" id="addConfirmBtn">✓ 등록하기</button>
+      <button class="btn btn-outline" id="addBackBtn" type="button">← 수정</button>
+      <button class="btn btn-success" id="addConfirmBtn" type="button">✓ 등록하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 기존 물품 재고 추가 모달 ──────────────────────────── -->
+<div id="addStockModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">기존 물품에 재고 추가</span>
+      <button class="modal-close" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Step 1: 선택 -->
+      <div id="addStockInputView">
+        <div class="quick-search-wrap">
+          <label class="form-label">물품 검색 (축약어 가능)</label>
+          <input type="text" id="addStockSearch" class="form-input" placeholder="예: g7 100개입, 스위트칠리, 코코넛">
+          <ul id="addStockSearchList" class="quick-search-list"></ul>
+        </div>
+        <div id="addStockSelectedList" class="add-stock-list">
+          <p class="add-stock-hint">위에서 물품을 검색해 선택하세요</p>
+        </div>
+      </div>
+      <!-- Step 2: 등록 확인 -->
+      <div id="addStockConfirmView" style="display:none">
+        <p class="confirm-question">아래 항목들을 등록하시겠습니까?</p>
+        <div id="addStockConfirmTable" class="confirm-table-wrap"></div>
+      </div>
+    </div>
+    <div class="modal-footer" id="addStockFooter1">
+      <button class="btn btn-outline modal-close" type="button">취소</button>
+      <button class="btn btn-primary" id="addStockPreviewBtn" type="button">다음 →</button>
+    </div>
+    <div class="modal-footer" id="addStockFooter2" style="display:none">
+      <button class="btn btn-outline" id="addStockBackBtn" type="button">← 수정</button>
+      <button class="btn btn-success" id="addStockConfirmBtn" type="button">✓ 등록하기</button>
     </div>
   </div>
 </div>
@@ -261,11 +290,14 @@
 <!-- ─── 토스트 컨테이너 ────────────────────────────────── -->
 <div id="toastContainer"></div>
 
+<!-- ─── 스크롤 맨위로 버튼 ──────────────────────────────── -->
+<button id="scrollTopBtn" class="scroll-top-btn" title="맨 위로" type="button">▲</button>
+
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
-<script src="js/data.js?v=20260611f"></script>
-<script src="js/auth.js?v=20260611f"></script>
-<script src="js/inventory.js?v=20260611f"></script>
-<script src="js/app.js?v=20260611f"></script>
+<script src="js/data.js?v=20260611g"></script>
+<script src="js/auth.js?v=20260611g"></script>
+<script src="js/inventory.js?v=20260611g"></script>
+<script src="js/app.js?v=20260611g"></script>
 
 </body>
 </html>

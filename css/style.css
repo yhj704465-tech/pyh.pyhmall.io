@@ -1022,7 +1022,7 @@ textarea.form-input {
 
 /* ── 변경 이력 패널 ────────────────────────────────────── */
 .log-panel {
-  width: 264px;
+  width: 310px;
   flex-shrink: 0;
   position: sticky;
   top: 72px;
@@ -1139,6 +1139,117 @@ textarea.form-input {
 }
 .btn-revert:hover { background: #334155; color: #e2e8f0; border-color: #475569; }
 
-@media (max-width: 1100px) {
+@media (max-width: 1200px) {
   .log-panel { display: none !important; }
+}
+
+/* ── 기존 물품 재고 추가 모달 ──────────────────────────── */
+.add-stock-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.add-stock-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px 0;
+}
+.add-stock-row {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+.asr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.asr-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.asr-code {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: var(--border);
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.asr-name {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asr-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.asr-remove:hover { color: var(--danger); background: var(--danger-light); }
+.asr-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.asr-qty, .asr-expiry { font-size: 12px; padding: 6px 8px; }
+@media (max-width: 600px) {
+  .asr-inputs { grid-template-columns: 1fr; }
+}
+
+/* ── 스크롤 맨위로 버튼 ────────────────────────────────── */
+.scroll-top-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 46px;
+  height: 46px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 500;
+  box-shadow: 0 4px 16px rgba(14,165,233,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.scroll-top-btn.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.scroll-top-btn:hover { background: var(--primary-dark); }
+@media (max-width: 600px) {
+  .scroll-top-btn { bottom: 16px; right: 16px; width: 42px; height: 42px; font-size: 14px; }
 }
