@@ -1583,6 +1583,29 @@ textarea.form-input {
   background: rgba(34,197,94,.15); color: #16a34a; border: 1px solid rgba(34,197,94,.3);
 }
 
+/* ── 추가 모달: Excel 가져오기 ──────────────────────────── */
+.add-or-divider {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 0 10px; color: #94a3b8; font-size: 12px;
+}
+.add-or-divider::before,
+.add-or-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.add-excel-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.btn-excel-import {
+  background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;
+  padding: 6px 14px; border-radius: 6px; font-size: 13px;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-excel-import:hover { background: #dcfce7; }
+.excel-import-hint {
+  font-size: 11px; color: #94a3b8; flex: 1; min-width: 0;
+}
+
 /* ── 추가 모달: 섹션 레이블 ─────────────────────────────── */
 .add-section-label {
   font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;

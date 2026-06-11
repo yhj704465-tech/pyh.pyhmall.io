@@ -246,11 +246,17 @@ function showAddConfirm() {
   parsed.forEach(e => {
     if (!e.code) {
       e._match = fuzzyMatchBest(e.name);
-      e._matchState = e._match ? 'matched' : 'unmatched'; // 'matched'|'unmatched'|'new'
+      e._matchState = e._match ? 'matched' : 'unmatched';
     }
   });
 
   _pendingAddItems = parsed;
+  _showAddConfirmStep();
+}
+
+function _showAddConfirmStep() {
+  const parsed = _pendingAddItems;
+  if (!parsed || parsed.length === 0) return;
 
   const codedItems   = parsed.filter(e => e.code);
   const noCodeItems  = parsed.filter(e => !e.code);
@@ -289,7 +295,7 @@ function showAddConfirm() {
   // ── 코드 없는 항목 (기존 물품 매칭) ──
   if (noCodeItems.length > 0) {
     html += `<div class="add-section-label" style="margin-top:8px">🔍 품목코드 없음 — 기존 물품 매칭 필요</div>`;
-    noCodeItems.forEach((e, localIdx) => {
+    noCodeItems.forEach(e => {
       const globalIdx = parsed.indexOf(e);
       html += renderAddMatchCard(e, globalIdx);
     });
@@ -305,6 +311,100 @@ function showAddConfirm() {
   const title = document.querySelector('#addModal .modal-title');
   if (title) title.textContent = `${parsed.length}개 항목 — 등록 확인`;
   updateAddConfirmBtn();
+}
+
+// ─── Excel 파일 가져오기 ───────────────────────────────────────────────────────
+
+function triggerExcelImport() {
+  const input = document.getElementById('excelFileInput');
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+
+function parseExcelRow(row) {
+  function col(...names) {
+    for (const n of names) {
+      const v = row[n];
+      if (v !== undefined && v !== null && v !== '') return v;
+    }
+    return '';
+  }
+
+  const codeVal  = col('품목코드', '코드', 'code');
+  const name     = String(col('품명 및 규격', '품명', '품목명', 'name') || '').trim();
+  if (!name) return null;
+
+  const code       = codeVal !== '' ? (parseInt(codeVal) || null) : null;
+  const stockBoxes = parseInt(col('실재고(박스)', '박스', '실재고', 'stockBoxes')) || 0;
+  const unitQty    = parseInt(col('낱개수량', '낱개', 'unitQty')) || 0;
+  const boxQty     = Math.max(1, parseInt(col('박스당수량', '박스당', 'boxQty')) || 1);
+  const expiryPeriod = String(col('소비기한기간', '기간', 'expiryPeriod') || '').trim();
+
+  let expiryRaw = '';
+  const rawExp = col('소비기한', '유통기한', 'expiryRaw');
+  if (rawExp !== '') {
+    if (rawExp instanceof Date) {
+      expiryRaw = formatDate(rawExp);
+    } else if (typeof rawExp === 'number') {
+      const n = Math.round(rawExp);
+      if (n > 40000 && n < 60000) expiryRaw = formatDate(excelSerialToDate(n));
+      else expiryRaw = String(rawExp);
+    } else {
+      expiryRaw = String(rawExp).trim();
+      // 문자열로 저장된 시리얼 날짜 처리
+      if (/^\d{5}$/.test(expiryRaw)) {
+        const n = parseInt(expiryRaw);
+        if (n > 40000 && n < 60000) expiryRaw = formatDate(excelSerialToDate(n));
+      }
+    }
+  }
+
+  return { code, name, stockBoxes, unitQty, boxQty, expiryRaw, expiryPeriod };
+}
+
+function handleExcelFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (typeof XLSX === 'undefined') {
+    showToast('Excel 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'error');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: false });
+      if (!wb.SheetNames.length) { showToast('시트를 찾을 수 없습니다.', 'error'); return; }
+
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      if (rows.length === 0) { showToast('엑셀 파일에 데이터가 없습니다.', 'error'); return; }
+
+      const parsed = rows.map(parseExcelRow).filter(Boolean);
+      if (parsed.length === 0) {
+        showToast('파싱된 항목이 없습니다. 첫 행이 컬럼명(품목코드, 품명 및 규격 등)인지 확인해주세요.', 'error');
+        return;
+      }
+
+      // 코드 없는 항목 퍼지 매칭
+      parsed.forEach(entry => {
+        if (!entry.code) {
+          entry._match = fuzzyMatchBest(entry.name);
+          entry._matchState = entry._match ? 'matched' : 'unmatched';
+        }
+      });
+
+      _pendingAddItems = parsed;
+      _showAddConfirmStep();
+
+    } catch (err) {
+      showToast('파일 읽기 오류: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function renderAddMatchCard(entry, idx) {
@@ -1284,6 +1384,12 @@ function setupModals() {
   // 추가 — 최종 등록 버튼
   const addConfirmBtn = document.getElementById('addConfirmBtn');
   if (addConfirmBtn) addConfirmBtn.addEventListener('click', doConfirmedAdd);
+
+  // 추가 — Excel 파일 가져오기
+  const excelImportBtn = document.getElementById('excelImportBtn');
+  if (excelImportBtn) excelImportBtn.addEventListener('click', triggerExcelImport);
+  const excelFileInput = document.getElementById('excelFileInput');
+  if (excelFileInput) excelFileInput.addEventListener('change', handleExcelFileSelect);
 }
 
 // ─── 삭제 확인 ────────────────────────────────────────────────────────────────

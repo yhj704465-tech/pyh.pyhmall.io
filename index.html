@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611p">
+  <link rel="stylesheet" href="css/style.css?v=20260611q">
 </head>
 <body>
 
@@ -258,6 +258,12 @@
           <textarea id="addText" class="form-input" placeholder="예시:&#10;466/G7 블랙 인스턴트커피/10박스/2027-06-01&#10;466/G7 블랙 인스턴트커피/5박스  ← 소비기한 생략 → 자동채움&#10;G7 블랙 커피/10박스/2027-09-01  ← 코드 생략 → 매칭 확인"></textarea>
         </div>
         <div id="addResult"></div>
+        <div class="add-or-divider"><span>또는</span></div>
+        <div class="add-excel-row">
+          <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none">
+          <button id="excelImportBtn" class="btn btn-excel-import" type="button">📊 Excel 파일로 가져오기</button>
+          <span class="excel-import-hint">내보내기 형식(품목코드, 품명 및 규격, 실재고(박스) …)과 동일한 파일</span>
+        </div>
       </div>
       <!-- Step 2: 등록 확인 -->
       <div id="addConfirmView" style="display:none">
@@ -337,10 +343,10 @@
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="js/data.js?v=20260611p"></script>
-<script src="js/auth.js?v=20260611p"></script>
-<script src="js/inventory.js?v=20260611p"></script>
-<script src="js/app.js?v=20260611p"></script>
+<script src="js/data.js?v=20260611q"></script>
+<script src="js/auth.js?v=20260611q"></script>
+<script src="js/inventory.js?v=20260611q"></script>
+<script src="js/app.js?v=20260611q"></script>
 
 </body>
 </html>
