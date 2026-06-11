@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611e">
+  <link rel="stylesheet" href="css/style.css?v=20260611f">
 </head>
 <body>
 
@@ -219,28 +219,41 @@
       <button class="modal-close">✕</button>
     </div>
     <div class="modal-body">
-      <div class="quick-search-wrap">
-        <label class="form-label">기존 품목 검색 (축약어 가능)</label>
-        <input type="text" id="quickSearchInput" class="form-input" placeholder="예: g7 100개입, 스위트칠리, 코코넛">
-        <ul id="quickSearchList" class="quick-search-list"></ul>
-      </div>
-      <div class="add-hint">
-        <strong>입력 형식</strong> (한 줄에 1개 항목, 엔터로 구분)<br>
-        <code>품목코드/품명/수량/소비기한</code> 또는 <code>품명/수량/소비기한</code><br><br>
-        <strong>수량 예시:</strong> <code>3박스</code> · <code>50개</code> · <code>3박스,5개</code><br>
-        <strong>소비기한 예시:</strong> <code>2027-05-01</code> · <code>2025-03-10제조</code> · <code>혼적:2027-01-01,2027-02-15</code>
-      </div>
-      <form id="addForm">
+
+      <!-- Step 1: 입력 -->
+      <div id="addInputView">
+        <div class="quick-search-wrap">
+          <label class="form-label">기존 품목 검색 (축약어 가능)</label>
+          <input type="text" id="quickSearchInput" class="form-input" placeholder="예: g7 100개입, 스위트칠리, 코코넛">
+          <ul id="quickSearchList" class="quick-search-list"></ul>
+        </div>
+        <div class="add-hint">
+          <strong>입력 형식</strong> (한 줄에 1개 항목, 엔터로 구분)<br>
+          <code>품명/수량/소비기한</code> 또는 <code>품목코드/품명/수량/소비기한</code><br><br>
+          <strong>수량:</strong> <code>3박스</code> · <code>50개</code> · <code>3박스,5개</code><br>
+          <strong>소비기한:</strong> <code>2027-05-01</code> · <code>2025-03-10제조</code> · 생략 시 기존 재고 기준
+        </div>
         <div class="form-group">
           <label class="form-label" for="addText">항목 입력</label>
-          <textarea id="addText" class="form-input" placeholder="예시:&#10;466/G7 블랙 인스턴트커피 15개입/18박스/2027-06-01&#10;메프라놈 스위트칠리소스/50박스/2026-09-15&#10;비엣코코 코코넛오일 200ml/30박스,6개/혼적:2026-08-01,2026-10-01"></textarea>
+          <textarea id="addText" class="form-input" placeholder="예시:&#10;G7 블랙 인스턴트커피 15개입/18박스/2027-06-01&#10;메프라놈 스위트칠리소스/50박스&#10;비엣코코 코코넛오일 200ml/30박스,6개/혼적:2026-08-01,2026-10-01"></textarea>
         </div>
         <div id="addResult"></div>
-      </form>
+      </div>
+
+      <!-- Step 2: 등록 확인 -->
+      <div id="addConfirmView" style="display:none">
+        <p class="confirm-question">아래 항목들을 등록하시겠습니까?</p>
+        <div id="confirmItemsTable" class="confirm-table-wrap"></div>
+      </div>
+
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" id="addFooter1">
       <button class="btn btn-outline modal-close">취소</button>
-      <button class="btn btn-primary" onclick="document.getElementById('addForm').requestSubmit()">추가하기</button>
+      <button class="btn btn-primary" id="addPreviewBtn">다음 →</button>
+    </div>
+    <div class="modal-footer" id="addFooter2" style="display:none">
+      <button class="btn btn-outline" id="addBackBtn">← 수정</button>
+      <button class="btn btn-success" id="addConfirmBtn">✓ 등록하기</button>
     </div>
   </div>
 </div>
@@ -249,10 +262,10 @@
 <div id="toastContainer"></div>
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
-<script src="js/data.js?v=20260611e"></script>
-<script src="js/auth.js?v=20260611e"></script>
-<script src="js/inventory.js?v=20260611e"></script>
-<script src="js/app.js?v=20260611e"></script>
+<script src="js/data.js?v=20260611f"></script>
+<script src="js/auth.js?v=20260611f"></script>
+<script src="js/inventory.js?v=20260611f"></script>
+<script src="js/app.js?v=20260611f"></script>
 
 </body>
 </html>

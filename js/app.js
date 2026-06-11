@@ -13,6 +13,8 @@ let state = {
 const LOG_KEY = 'warehouse_log';
 const MAX_LOG_ENTRIES = 30;
 
+let _pendingAddItems = null;
+
 // ─── 초기화 ──────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -214,6 +216,101 @@ function renderAutocomplete(suggestions, dropdown, input) {
       renderAll();
     });
   });
+}
+
+// ─── 추가 항목 보강 (코드 자동매칭 + 소비기한 자동채움) ─────────────────────
+
+function enrichParsedItems(parsed) {
+  return parsed.map(entry => {
+    const result = { ...entry };
+
+    // 코드 없으면 품명으로 기존 항목 매칭 시도
+    if (!result.code) {
+      const nameNorm = (result.name || '').trim().toLowerCase();
+      const match = state.items.find(i => (i.name || '').trim().toLowerCase() === nameNorm);
+      if (match) result.code = match.code;
+    }
+
+    // 소비기한 없으면 같은 코드 기존 재고 중 가장 빠른 날짜로
+    if (!result.expiryRaw && result.code) {
+      const existing = state.items.filter(i => i.code === result.code);
+      const withExpiry = existing
+        .map(i => ({ raw: i.expiryRaw, info: parseExpiry(i.expiryRaw, i.expiryPeriod) }))
+        .filter(x => x.info.daysLeft !== null && x.info.daysLeft >= 0)
+        .sort((a, b) => a.info.daysLeft - b.info.daysLeft);
+      if (withExpiry.length > 0) {
+        result.expiryRaw = withExpiry[0].raw;
+        result._autoExpiry = true;
+      }
+    }
+
+    return result;
+  });
+}
+
+function formatAddQty(entry) {
+  const parts = [];
+  if (entry.stockBoxes > 0) parts.push(`${entry.stockBoxes}박스`);
+  if (entry.unitQty > 0) parts.push(`${entry.unitQty}개`);
+  return parts.length > 0 ? parts.join(' ') : '0';
+}
+
+function showAddConfirm() {
+  const text = document.getElementById('addText').value;
+  const rawParsed = parseTextBlock(text);
+  if (rawParsed.length === 0) {
+    showToast('추가할 항목이 없습니다.', 'error');
+    return;
+  }
+
+  const enriched = enrichParsedItems(rawParsed);
+  _pendingAddItems = enriched;
+
+  const rows = enriched.map(e => {
+    const codeCell = e.code
+      ? `<span>${e.code}</span>`
+      : `<span class="auto-code">자동</span>`;
+    const expCell = e.expiryRaw
+      ? `${escapeHtml(e.expiryRaw)}${e._autoExpiry ? ' <span class="auto-expiry">(기존 기준)</span>' : ''}`
+      : `<span class="no-expiry">없음</span>`;
+    return `<tr>
+      <td class="ct-code">${codeCell}</td>
+      <td class="ct-name">${escapeHtml(e.name)}</td>
+      <td class="ct-qty">${formatAddQty(e)}</td>
+      <td class="ct-exp">${expCell}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('confirmItemsTable').innerHTML = `
+    <table class="confirm-table">
+      <thead><tr><th>코드</th><th>품명</th><th>수량</th><th>소비기한</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  document.getElementById('addInputView').style.display = 'none';
+  document.getElementById('addConfirmView').style.display = 'block';
+  document.getElementById('addFooter1').style.display = 'none';
+  document.getElementById('addFooter2').style.display = 'flex';
+  const title = document.querySelector('#addModal .modal-title');
+  if (title) title.textContent = `${enriched.length}개 항목 — 등록 확인`;
+}
+
+function doConfirmedAdd() {
+  if (!_pendingAddItems || _pendingAddItems.length === 0) return;
+
+  const beforeIds = new Set(state.items.map(i => i.id));
+  addItems(state.items, _pendingAddItems);
+  const addedIds = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
+  const label = _pendingAddItems.length === 1
+    ? _pendingAddItems[0].name
+    : `${_pendingAddItems[0].name} 외 ${_pendingAddItems.length - 1}개`;
+  saveInventory(state.items);
+  addLogEntry('add', label, { ids: addedIds });
+
+  _pendingAddItems = null;
+  closeModal('addModal');
+  renderAll();
+  showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
 }
 
 // ─── 품목 축약어 퍼지 검색 ────────────────────────────────────────────────────
@@ -501,6 +598,14 @@ function openAddModal() {
   const ql = document.getElementById('quickSearchList');
   if (qi) qi.value = '';
   if (ql) { ql.innerHTML = ''; ql.classList.remove('open'); }
+  // Step 1로 초기화
+  document.getElementById('addInputView').style.display = 'block';
+  document.getElementById('addConfirmView').style.display = 'none';
+  document.getElementById('addFooter1').style.display = 'flex';
+  document.getElementById('addFooter2').style.display = 'none';
+  const title = modal.querySelector('.modal-title');
+  if (title) title.textContent = '재고 추가';
+  _pendingAddItems = null;
   modal.style.display = 'flex';
 }
 
@@ -613,28 +718,27 @@ function setupModals() {
     });
   }
 
-  // 추가 폼 제출
-  const addForm = document.getElementById('addForm');
-  if (addForm) {
-    addForm.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = document.getElementById('addText').value;
-      const parsed = parseTextBlock(text);
-      if (parsed.length === 0) {
-        showToast('추가할 항목이 없습니다.', 'error');
-        return;
-      }
-      const beforeIds = new Set(state.items.map(i => i.id));
-      addItems(state.items, parsed);
-      const addedIds = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
-      const addLabel = parsed.length === 1 ? parsed[0].name : `${parsed[0].name} 외 ${parsed.length - 1}개`;
-      saveInventory(state.items);
-      addLogEntry('add', addLabel, { ids: addedIds });
-      closeModal('addModal');
-      renderAll();
-      showToast(`${parsed.length}개 항목이 추가되었습니다.`, 'success');
+  // 추가 — 다음(확인 미리보기) 버튼
+  const addPreviewBtn = document.getElementById('addPreviewBtn');
+  if (addPreviewBtn) addPreviewBtn.addEventListener('click', showAddConfirm);
+
+  // 추가 — 수정(뒤로가기) 버튼
+  const addBackBtn = document.getElementById('addBackBtn');
+  if (addBackBtn) {
+    addBackBtn.addEventListener('click', () => {
+      document.getElementById('addInputView').style.display = 'block';
+      document.getElementById('addConfirmView').style.display = 'none';
+      document.getElementById('addFooter1').style.display = 'flex';
+      document.getElementById('addFooter2').style.display = 'none';
+      const title = document.querySelector('#addModal .modal-title');
+      if (title) title.textContent = '재고 추가';
+      _pendingAddItems = null;
     });
   }
+
+  // 추가 — 최종 등록 버튼
+  const addConfirmBtn = document.getElementById('addConfirmBtn');
+  if (addConfirmBtn) addConfirmBtn.addEventListener('click', doConfirmedAdd);
 }
 
 // ─── 삭제 확인 ────────────────────────────────────────────────────────────────
