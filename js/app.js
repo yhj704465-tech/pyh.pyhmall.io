@@ -1040,9 +1040,29 @@ function setupGlobalEvents() {
     });
   }
 
-  // 엑셀 내보내기 (CSV)
-  const exportBtn = document.getElementById('exportBtn');
-  if (exportBtn) exportBtn.addEventListener('click', exportToCSV);
+  // 다운로드 드롭다운
+  const exportBtn    = document.getElementById('exportBtn');
+  const dlDropdown   = document.getElementById('dlDropdown');
+  const dlWrap       = document.getElementById('dlWrap');
+  if (exportBtn && dlDropdown) {
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      dlDropdown.classList.toggle('open');
+    });
+    document.addEventListener('click', (e) => {
+      if (!dlWrap || !dlWrap.contains(e.target)) dlDropdown.classList.remove('open');
+    });
+  }
+  const exportXlsxBtn = document.getElementById('exportXlsxBtn');
+  if (exportXlsxBtn) exportXlsxBtn.addEventListener('click', () => {
+    dlDropdown.classList.remove('open');
+    exportToXLSX();
+  });
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
+  if (exportCsvBtn) exportCsvBtn.addEventListener('click', () => {
+    dlDropdown.classList.remove('open');
+    exportToCSV();
+  });
 
   // 전체 펼치기/접기
   const expandAllBtn = document.getElementById('expandAllBtn');
@@ -1061,18 +1081,41 @@ function setupGlobalEvents() {
   }
 }
 
-// ─── CSV 내보내기 ─────────────────────────────────────────────────────────────
+// ─── 내보내기 ────────────────────────────────────────────────────────────────
+
+function getExportRows() {
+  return state.items.map(item => ({
+    '품목코드':   item.code,
+    '품명 및 규격': item.name || '',
+    '실재고(박스)': item.stockBoxes || 0,
+    '낱개수량':   item.unitQty || 0,
+    '재고수량(총)': item.totalStock || 0,
+    '박스당수량':  item.boxQty || 1,
+    '소비기한':   item.expiryRaw || '',
+    '소비기한기간': item.expiryPeriod || '',
+  }));
+}
+
+function exportToXLSX() {
+  if (typeof XLSX === 'undefined') {
+    showToast('XLSX 라이브러리를 불러오는 중입니다. 잠시 후 다시 시도해주세요.', 'error');
+    return;
+  }
+  const ws = XLSX.utils.json_to_sheet(getExportRows());
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '재고현황');
+  XLSX.writeFile(wb, `창고재고현황_${new Date().toISOString().slice(0,10)}.xlsx`);
+  showToast('Excel 파일로 내보냈습니다.', 'success');
+}
 
 function exportToCSV() {
-  const headers = ['품목코드', '품명 및 규격', '실재고', '낱개수량', '재고수량', '박스당수량', '소비기한', '소비기한년수'];
-  const rows = state.items.map(item => [
-    item.code, `"${(item.name || '').replace(/"/g, '""')}"`,
-    item.stockBoxes, item.unitQty, item.totalStock, item.boxQty,
-    `"${(item.expiryRaw || '').replace(/"/g, '""')}"`,
-    `"${(item.expiryPeriod || '').replace(/"/g, '""')}"`
-  ]);
-
-  const csv = '﻿' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const rows = getExportRows();
+  const headers = Object.keys(rows[0] || {});
+  const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = '﻿' + [
+    headers.join(','),
+    ...rows.map(r => headers.map(h => escape(r[h])).join(','))
+  ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

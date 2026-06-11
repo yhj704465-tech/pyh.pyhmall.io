@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611i">
+  <link rel="stylesheet" href="css/style.css?v=20260611j">
 </head>
 <body>
 
@@ -41,7 +41,13 @@
     <div id="adminControls">
       <button id="addItemBtn"  class="btn btn-primary">➕ 새 물품</button>
       <button id="outgoingBtn" class="btn btn-outline">📤 출고 물품</button>
-      <button id="exportBtn"   class="btn btn-outline">📥 CSV</button>
+      <div class="dl-wrap" id="dlWrap">
+        <button id="exportBtn" class="btn btn-outline">📥 다운로드 ▾</button>
+        <div id="dlDropdown" class="dl-dropdown">
+          <button id="exportXlsxBtn" class="dl-option">📊 Excel (XLSX)</button>
+          <button id="exportCsvBtn"  class="dl-option">📄 CSV</button>
+        </div>
+      </div>
       <button id="logoutBtn" class="btn-logout">로그아웃</button>
     </div>
   </div>
@@ -296,10 +302,11 @@
 <button id="scrollTopBtn" class="scroll-top-btn" title="맨 위로" type="button">▲</button>
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
-<script src="js/data.js?v=20260611i"></script>
-<script src="js/auth.js?v=20260611i"></script>
-<script src="js/inventory.js?v=20260611i"></script>
-<script src="js/app.js?v=20260611i"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="js/data.js?v=20260611j"></script>
+<script src="js/auth.js?v=20260611j"></script>
+<script src="js/inventory.js?v=20260611j"></script>
+<script src="js/app.js?v=20260611j"></script>
 
 </body>
 </html>

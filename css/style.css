@@ -1143,6 +1143,41 @@ textarea.form-input {
   .log-panel { display: none !important; }
 }
 
+/* ── 다운로드 드롭다운 ─────────────────────────────────── */
+.dl-wrap { position: relative; display: inline-block; }
+.dl-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  z-index: 300;
+  min-width: 170px;
+  overflow: hidden;
+}
+.dl-dropdown.open { display: block; }
+.dl-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.15s;
+}
+.dl-option:hover { background: var(--surface2); }
+.dl-option + .dl-option { border-top: 1px solid var(--border); }
+
 /* ── 위험(빨강) 버튼 ───────────────────────────────────── */
 .btn-danger {
   padding: 8px 18px;
