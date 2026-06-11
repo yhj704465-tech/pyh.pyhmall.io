@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="description" content="물류창고 재고현황 관리 시스템">
+  <meta name="theme-color" content="#0f172a">
+  <title>물류창고 재고현황</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ─── 헤더 ──────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-top">
+    <!-- 로고 -->
+    <div class="header-logo">
+      <span class="logo-icon">📦</span>
+      <div>
+        <span class="logo-text">물류창고 재고현황</span>
+        <span class="logo-sub">Warehouse Inventory System</span>
+      </div>
+    </div>
+
+    <!-- 로그인 영역 (비로그인 시) -->
+    <div id="loginSection">
+      <form id="loginForm" autocomplete="off">
+        <input type="text" id="loginId" class="login-input" placeholder="아이디" autocomplete="username" maxlength="30">
+        <input type="password" id="loginPw" class="login-input" placeholder="비밀번호" autocomplete="current-password" maxlength="30">
+        <button type="submit" class="btn-login">로그인</button>
+      </form>
+      <div id="loginError" class="login-error"></div>
+    </div>
+
+    <!-- 관리자 로그인 후 표시 -->
+    <div id="sessionInfo">
+      <span>👤 관리자</span>
+      <span class="separator"></span>
+      <span id="sessionTimer">세션 240분 남음</span>
+    </div>
+    <div id="adminControls">
+      <button id="addItemBtn" class="btn btn-primary">➕ 추가</button>
+      <button id="exportBtn"  class="btn btn-outline">📥 CSV</button>
+      <button id="resetDataBtn" class="btn btn-outline" title="초기 데이터로 리셋">🔄 리셋</button>
+      <button id="logoutBtn" class="btn-logout">로그아웃</button>
+    </div>
+  </div>
+</header>
+
+<!-- ─── 환영 배너 ──────────────────────────────────────── -->
+<div class="welcome-banner">
+  <p id="welcomeText"></p>
+</div>
+
+<!-- ─── 메인 컨테이너 ──────────────────────────────────── -->
+<main class="main-container">
+
+  <!-- 소비기한 범례 -->
+  <div class="legend-card">
+    <div class="legend-title">소비기한 색상 범례</div>
+    <div class="legend-items">
+      <div class="legend-item">
+        <span class="expiry-badge badge-normal">D-xxx</span>
+        <span>정상 (6개월 이상)</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-warning">D-xxx</span>
+        <span>임박 (6개월 미만)</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-critical">D-30</span>
+        <span>위험 (30일 미만)</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-expired">만료됨</span>
+        <span>유통기한 경과</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-mixed">혼적</span>
+        <span>혼적 (로트 혼합)</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-multi">다중소비기한</span>
+        <span>여러 소비기한</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-mfg">제조일 기준</span>
+        <span>제조일 기준 계산</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-no-mfg">제조일자 없음</span>
+        <span>제조일자 미기재</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-none">소비기한 없음</span>
+        <span>소비기한 미설정</span>
+      </div>
+      <div class="legend-item">
+        <span class="expiry-badge badge-hardware">잡화</span>
+        <span>비식품 (잡화류)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 소비기한 임박 알림 배너 -->
+  <div id="expirySoonBanner">
+    <span class="banner-icon">⚠️</span>
+    <div class="banner-text">
+      소비기한 6개월 미만 임박 항목이 <span class="expiry-count">0</span>개 있습니다!
+    </div>
+    <button id="showExpiringSoonBtn" class="btn btn-danger">확인하기</button>
+  </div>
+
+  <!-- 컨트롤 바 (검색 + 필터) -->
+  <div class="control-bar">
+    <div id="searchWrapper">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="search" id="searchInput" placeholder="품목코드 또는 품명 검색..." autocomplete="off">
+        <button id="searchClear" title="검색 초기화">✕</button>
+      </div>
+      <ul id="autocompleteList"></ul>
+    </div>
+
+    <button id="expiringSoonBtn" class="btn btn-warning">⚠️ 6개월 이내 임박</button>
+    <button id="expandAllBtn"   class="btn btn-outline">전체 펼치기</button>
+  </div>
+
+  <!-- 테이블 헤더 (카운트) -->
+  <div class="table-header">
+    <span id="itemCount" class="item-count"></span>
+  </div>
+
+  <!-- ── 컬럼 헤더 (데스크탑) ── -->
+  <div class="compact-row" style="background:#e2e8f0;border-radius:8px;margin-bottom:4px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.4px;padding:8px 14px;">
+    <div class="cell cell-code">코드</div>
+    <div class="cell cell-name">품명 및 규격</div>
+    <div class="cell cell-stock" style="text-align:right">재고수량</div>
+    <div class="cell cell-expiry">소비기한</div>
+    <div class="cell cell-actions">관리</div>
+  </div>
+
+  <!-- 재고 목록 -->
+  <div id="inventoryContainer"></div>
+
+</main>
+
+<!-- ─── 수정 모달 ──────────────────────────────────────── -->
+<div id="editModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">항목 수정</span>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="editForm">
+        <input type="hidden" id="editId">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="editCode">품목코드</label>
+            <input type="number" id="editCode" class="form-input" placeholder="품목코드">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editBoxQty">박스당 수량</label>
+            <input type="number" id="editBoxQty" class="form-input" placeholder="박스당 낱개 수" min="1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="editName">품명 및 규격</label>
+          <input type="text" id="editName" class="form-input" placeholder="품명 및 규격">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="editStockBoxes">실재고 (박스)</label>
+            <input type="number" id="editStockBoxes" class="form-input" placeholder="박스 수" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editUnitQty">낱개수량</label>
+            <input type="number" id="editUnitQty" class="form-input" placeholder="낱개 수" min="0">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="editExpiryRaw">소비기한</label>
+            <input type="text" id="editExpiryRaw" class="form-input" placeholder="예: 2027-05-01 또는 혼적:날짜">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="editExpiryPeriod">소비기한 기간</label>
+            <input type="text" id="editExpiryPeriod" class="form-input" placeholder="예: 24개월, 제조일자 없음">
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline modal-close">취소</button>
+      <button class="btn btn-primary" onclick="document.getElementById('editForm').requestSubmit()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 추가 모달 ──────────────────────────────────────── -->
+<div id="addModal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">재고 추가</span>
+      <button class="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="add-hint">
+        <strong>입력 형식</strong> (한 줄에 1개 항목, 엔터로 구분)<br>
+        <code>품목코드/품명/수량/소비기한</code> 또는 <code>품명/수량/소비기한</code><br><br>
+        <strong>수량 예시:</strong> <code>3박스</code> · <code>50개</code> · <code>3박스,5개</code><br>
+        <strong>소비기한 예시:</strong> <code>2027-05-01</code> · <code>2025-03-10제조</code> · <code>혼적:2027-01-01,2027-02-15</code>
+      </div>
+      <form id="addForm">
+        <div class="form-group">
+          <label class="form-label" for="addText">항목 입력</label>
+          <textarea id="addText" class="form-input" placeholder="예시:&#10;466/G7 블랙 인스턴트커피 15개입/18박스/2027-06-01&#10;메프라놈 스위트칠리소스/50박스/2026-09-15&#10;비엣코코 코코넛오일 200ml/30박스,6개/혼적:2026-08-01,2026-10-01"></textarea>
+        </div>
+        <div id="addResult"></div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline modal-close">취소</button>
+      <button class="btn btn-primary" onclick="document.getElementById('addForm').requestSubmit()">추가하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 토스트 컨테이너 ────────────────────────────────── -->
+<div id="toastContainer"></div>
+
+<!-- ─── 스크립트 ──────────────────────────────────────── -->
+<script src="js/data.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
