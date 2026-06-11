@@ -10,6 +10,9 @@ let state = {
   filterCode: null, // 코드별 필터
 };
 
+const LOG_KEY = 'warehouse_log';
+const MAX_LOG_ENTRIES = 30;
+
 // ─── 초기화 ──────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -25,6 +28,25 @@ async function init() {
 
   // 로그인 상태 UI 업데이트
   updateAuthUI();
+}
+
+// ─── 변경 이력 관리 ──────────────────────────────────────────────────────────
+
+function loadLog() {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveLog(log) {
+  localStorage.setItem(LOG_KEY, JSON.stringify(log));
+}
+
+function addLogEntry(action, label, undoData) {
+  const log = loadLog();
+  log.unshift({ id: Date.now(), time: new Date().toISOString(), action, label, undoData });
+  if (log.length > MAX_LOG_ENTRIES) log.length = MAX_LOG_ENTRIES;
+  saveLog(log);
+  renderLogPanel();
 }
 
 // ─── 환영 텍스트 애니메이션 ───────────────────────────────────────────────────
@@ -118,6 +140,7 @@ function updateAuthUI() {
     if (adminControls) adminControls.style.display = 'none';
     if (sessionInfo) sessionInfo.style.display = 'none';
   }
+  renderLogPanel();
 }
 
 // ─── 검색 & 자동완성 ─────────────────────────────────────────────────────────
@@ -198,6 +221,7 @@ function renderAutocomplete(suggestions, dropdown, input) {
 function renderAll() {
   renderInventoryTable();
   renderExpirySoonBanner();
+  renderLogPanel();
   // 비로그인 시 검색/필터/테이블헤더 숨김
   const controlBar = document.querySelector('.control-bar');
   const tableHeader = document.querySelector('.table-header');
@@ -492,8 +516,10 @@ function setupModals() {
         expiryRaw: document.getElementById('editExpiryRaw').value.trim(),
         expiryPeriod: document.getElementById('editExpiryPeriod').value.trim(),
       };
+      const beforeItem = { ...state.items.find(i => i.id === id) };
       updateItem(state.items, id, updates);
       saveInventory(state.items);
+      addLogEntry('edit', beforeItem.name || `항목 #${id}`, { before: beforeItem });
       closeModal('editModal');
       renderAll();
       showToast('수정되었습니다.', 'success');
@@ -531,8 +557,12 @@ function setupModals() {
         showToast('추가할 항목이 없습니다.', 'error');
         return;
       }
+      const beforeIds = new Set(state.items.map(i => i.id));
       addItems(state.items, parsed);
+      const addedIds = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
+      const addLabel = parsed.length === 1 ? parsed[0].name : `${parsed[0].name} 외 ${parsed.length - 1}개`;
       saveInventory(state.items);
+      addLogEntry('add', addLabel, { ids: addedIds });
       closeModal('addModal');
       renderAll();
       showToast(`${parsed.length}개 항목이 추가되었습니다.`, 'success');
@@ -546,8 +576,10 @@ function confirmDeleteItem(id) {
   const item = state.items.find(i => i.id === id);
   if (!item) return;
   if (confirm(`"${item.name}" 항목을 삭제하시겠습니까?`)) {
+    const snapshot = { ...item };
     deleteItem(state.items, id);
     saveInventory(state.items);
+    addLogEntry('delete', item.name, { items: [snapshot] });
     renderAll();
     showToast('삭제되었습니다.', 'success');
   }
@@ -557,10 +589,13 @@ function confirmDeleteGroup(code) {
   const count = state.items.filter(i => i.code === code).length;
   const name = state.items.find(i => i.code === code)?.name || code;
   if (confirm(`"${name}" 그룹 전체 (${count}개 항목)를 삭제하시겠습니까?`)) {
-    const ids = state.items.filter(i => i.code === code).map(i => i.id);
+    const snapshots = state.items.filter(i => i.code === code).map(i => ({ ...i }));
+    const ids = snapshots.map(i => i.id);
     ids.forEach(id => deleteItem(state.items, id));
     saveInventory(state.items);
     state.expandedIds.delete(code);
+    const delLabel = count === 1 ? name : `${name} 외 ${count - 1}개 (그룹)`;
+    addLogEntry('delete', delLabel, { items: snapshots });
     renderAll();
     showToast(`${count}개 항목이 삭제되었습니다.`, 'success');
   }
@@ -612,16 +647,13 @@ function setupGlobalEvents() {
     });
   }
 
-  // 데이터 초기화 (관리자 전용)
-  const resetBtn = document.getElementById('resetDataBtn');
-  if (resetBtn) {
-    resetBtn.addEventListener('click', () => {
-      if (confirm('모든 재고 데이터를 초기 데이터(엑셀 기준)로 리셋하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
-        localStorage.removeItem(STORAGE_KEY);
-        state.items = loadInventory();
-        state.expandedIds.clear();
-        renderAll();
-        showToast('데이터가 초기화되었습니다.', 'info');
+  // 변경 이력 전체 삭제
+  const clearLogBtn = document.getElementById('clearLogBtn');
+  if (clearLogBtn) {
+    clearLogBtn.addEventListener('click', () => {
+      if (confirm('변경 이력을 전체 삭제하시겠습니까?')) {
+        saveLog([]);
+        renderLogPanel();
       }
     });
   }
@@ -696,6 +728,76 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ─── 변경 이력 패널 렌더링 ───────────────────────────────────────────────────
+
+function renderLogPanel() {
+  const panel = document.getElementById('logPanel');
+  const listEl = document.getElementById('logList');
+  if (!panel || !listEl) return;
+
+  if (!state.isAdmin) {
+    panel.classList.remove('visible');
+    return;
+  }
+
+  panel.classList.add('visible');
+  const log = loadLog();
+
+  if (log.length === 0) {
+    listEl.innerHTML = '<p class="log-empty">변경 이력이 없습니다</p>';
+    return;
+  }
+
+  const ACTION_LABEL = { add: '추가', edit: '수정', delete: '삭제' };
+  const ACTION_CLASS = { add: 'log-add', edit: 'log-edit', delete: 'log-del' };
+  const pad = n => String(n).padStart(2, '0');
+
+  listEl.innerHTML = log.map(entry => {
+    const t = new Date(entry.time);
+    const timeStr = `${pad(t.getMonth()+1)}/${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+    return `
+      <div class="log-entry">
+        <div class="log-meta">
+          <span class="log-action ${ACTION_CLASS[entry.action]}">${ACTION_LABEL[entry.action]}</span>
+          <span class="log-time">${timeStr}</span>
+        </div>
+        <div class="log-label">${escapeHtml(entry.label)}</div>
+        <button class="btn-revert" data-log-id="${entry.id}">되돌리기</button>
+      </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.btn-revert').forEach(btn => {
+    btn.addEventListener('click', () => revertLogEntry(Number(btn.dataset.logId)));
+  });
+}
+
+function revertLogEntry(logId) {
+  const log = loadLog();
+  const entry = log.find(e => e.id === logId);
+  if (!entry) return;
+
+  const actionLabel = { add: '추가', edit: '수정', delete: '삭제' }[entry.action];
+  if (!confirm(`"${entry.label}" ${actionLabel} 작업을 되돌리시겠습니까?`)) return;
+
+  if (entry.action === 'edit') {
+    const idx = state.items.findIndex(i => i.id === entry.undoData.before.id);
+    if (idx === -1) { showToast('항목을 찾을 수 없습니다.', 'error'); return; }
+    state.items[idx] = { ...entry.undoData.before };
+  } else if (entry.action === 'add') {
+    entry.undoData.ids.forEach(id => {
+      const idx = state.items.findIndex(i => i.id === id);
+      if (idx !== -1) state.items.splice(idx, 1);
+    });
+  } else if (entry.action === 'delete') {
+    entry.undoData.items.forEach(item => state.items.push({ ...item }));
+  }
+
+  saveInventory(state.items);
+  saveLog(log.filter(e => e.id !== logId));
+  renderAll();
+  showToast('되돌렸습니다.', 'info');
 }
 
 // ─── DOM 준비 후 시작 ─────────────────────────────────────────────────────────

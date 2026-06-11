@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611c">
+  <link rel="stylesheet" href="css/style.css?v=20260611d">
 </head>
 <body>
 
@@ -41,7 +41,6 @@
     <div id="adminControls">
       <button id="addItemBtn" class="btn btn-primary">➕ 추가</button>
       <button id="exportBtn"  class="btn btn-outline">📥 CSV</button>
-      <button id="resetDataBtn" class="btn btn-outline" title="초기 데이터로 리셋">🔄 리셋</button>
       <button id="logoutBtn" class="btn-logout">로그아웃</button>
     </div>
   </div>
@@ -51,6 +50,9 @@
 <div class="welcome-banner">
   <p id="welcomeText"></p>
 </div>
+
+<!-- ─── 본문 레이아웃 ──────────────────────────────────── -->
+<div class="layout-wrapper">
 
 <!-- ─── 메인 컨테이너 ──────────────────────────────────── -->
 <main class="main-container">
@@ -145,6 +147,17 @@
 
 </main>
 
+<!-- ─── 변경 이력 패널 ─────────────────────────────────── -->
+<aside id="logPanel" class="log-panel">
+  <div class="log-panel-header">
+    <span class="log-panel-title">📋 변경 이력</span>
+    <button id="clearLogBtn" class="btn-log-clear" title="이력 전체 삭제">🗑️</button>
+  </div>
+  <div id="logList" class="log-list"></div>
+</aside>
+
+</div><!-- /.layout-wrapper -->
+
 <!-- ─── 수정 모달 ──────────────────────────────────────── -->
 <div id="editModal" class="modal-overlay">
   <div class="modal-box">
@@ -231,10 +244,10 @@
 <div id="toastContainer"></div>
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
-<script src="js/data.js?v=20260611c"></script>
-<script src="js/auth.js?v=20260611c"></script>
-<script src="js/inventory.js?v=20260611c"></script>
-<script src="js/app.js?v=20260611c"></script>
+<script src="js/data.js?v=20260611d"></script>
+<script src="js/auth.js?v=20260611d"></script>
+<script src="js/inventory.js?v=20260611d"></script>
+<script src="js/app.js?v=20260611d"></script>
 
 </body>
 </html>
