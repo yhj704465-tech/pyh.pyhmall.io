@@ -783,6 +783,19 @@ textarea.form-input {
 .empty-icon { font-size: 48px; margin-bottom: 12px; }
 .empty-state p { font-size: 14px; }
 
+/* 로그인 필요 안내 */
+.login-required-state {
+  text-align: center;
+  padding: 80px 20px 100px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 2px dashed var(--border);
+  margin-top: 8px;
+}
+.lr-icon  { font-size: 56px; margin-bottom: 16px; }
+.lr-title { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.lr-sub   { font-size: 14px; color: var(--text-muted); }
+
 /* ── 토스트 ─────────────────────────────────────────── */
 #toastContainer {
   position: fixed;

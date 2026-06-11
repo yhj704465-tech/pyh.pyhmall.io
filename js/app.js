@@ -198,11 +198,34 @@ function renderAutocomplete(suggestions, dropdown, input) {
 function renderAll() {
   renderInventoryTable();
   renderExpirySoonBanner();
+  // 비로그인 시 검색/필터/테이블헤더 숨김
+  const controlBar = document.querySelector('.control-bar');
+  const tableHeader = document.querySelector('.table-header');
+  const columnHeader = document.querySelector('.compact-row[style]');
+  const legendCard = document.querySelector('.legend-card');
+  const display = state.isAdmin ? '' : 'none';
+  if (controlBar) controlBar.style.display = state.isAdmin ? 'flex' : 'none';
+  if (tableHeader) tableHeader.style.display = state.isAdmin ? 'flex' : 'none';
+  if (columnHeader) columnHeader.style.display = state.isAdmin ? '' : 'none';
+  if (legendCard) legendCard.style.display = state.isAdmin ? '' : 'none';
 }
 
 function renderInventoryTable() {
   const container = document.getElementById('inventoryContainer');
   if (!container) return;
+
+  // 비로그인 시 재고 숨김
+  if (!state.isAdmin) {
+    const countEl = document.getElementById('itemCount');
+    if (countEl) countEl.textContent = '';
+    container.innerHTML = `
+      <div class="login-required-state">
+        <div class="lr-icon">🔒</div>
+        <p class="lr-title">로그인이 필요합니다</p>
+        <p class="lr-sub">재고현황을 확인하려면 상단에서 관리자 로그인을 해주세요.</p>
+      </div>`;
+    return;
+  }
 
   let filtered = state.showExpiringSoon
     ? getExpiringSoon(state.items)
