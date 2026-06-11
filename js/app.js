@@ -1492,9 +1492,56 @@ function setupScrollTop() {
   btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 }
 
+// ─── 사이드 패널 부드러운 스크롤 추종 ────────────────────────────────────────
+
+function setupSmoothPanels() {
+  const LERP   = 0.11;   // 클수록 빠르게 따라옴 (0~1)
+  const headerEl = document.querySelector('.header');
+
+  const panelIds = ['topPanel', 'logPanel'];
+  const panels   = panelIds.map(id => document.getElementById(id)).filter(Boolean);
+
+  // 패널별 상태 (base: 문서 내 자연 위치, cur: 현재 translateY)
+  const S = panels.map(() => ({ base: null, cur: 0 }));
+
+  function tick() {
+    const offset = (headerEl?.offsetHeight ?? 70) + 12;
+
+    panels.forEach((el, i) => {
+      const s = S[i];
+
+      if (!el.classList.contains('visible')) {
+        // 비표시 상태 → 리셋
+        if (s.cur !== 0 || s.base !== null) {
+          s.base = null;
+          s.cur  = 0;
+          el.style.transform = '';
+        }
+        return;
+      }
+
+      // 처음 visible 될 때 자연 위치 계산 (cur=0이므로 transform 없는 상태)
+      if (s.base === null) {
+        s.base = el.getBoundingClientRect().top + window.scrollY;
+      }
+
+      const target = Math.max(0, window.scrollY + offset - s.base);
+      s.cur += (target - s.cur) * LERP;
+      if (Math.abs(target - s.cur) < 0.1) s.cur = target;
+
+      el.style.transform = `translateY(${s.cur.toFixed(2)}px)`;
+    });
+
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   await init();
   setupModals();
   setupGlobalEvents();
   setupScrollTop();
+  setupSmoothPanels();
 });

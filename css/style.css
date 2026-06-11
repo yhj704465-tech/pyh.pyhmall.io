@@ -1024,12 +1024,12 @@ textarea.form-input {
 .log-panel {
   width: 310px;
   flex-shrink: 0;
-  position: sticky;
-  top: 72px;
+  align-self: flex-start;
   max-height: calc(100vh - 90px);
   overflow-y: auto;
   margin-top: 20px;
   margin-right: 16px;
+  will-change: transform;
   background: #1e293b;
   border: 1px solid #334155;
   border-radius: 12px;
@@ -1147,10 +1147,10 @@ textarea.form-input {
 .top-panel {
   width: 252px;
   flex-shrink: 0;
+  margin-left: 16px;
   margin-right: 16px;
-  position: sticky;
-  top: 16px;
   align-self: flex-start;
+  will-change: transform;
   background: linear-gradient(160deg, #0d1b3e 0%, #1a0d35 55%, #0b1421 100%);
   border-radius: 20px;
   border: 1px solid rgba(139,92,246,.28);
