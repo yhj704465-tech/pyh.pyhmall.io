@@ -14,8 +14,7 @@ const LOG_KEY = 'warehouse_log';
 const MAX_LOG_ENTRIES = 30;
 
 let _pendingAddItems = null;
-let _pendingAddStockItems = null;
-let _addStockSelected = [];
+let _outgoingLines = null;
 
 // ─── 초기화 ──────────────────────────────────────────────────────────────────
 
@@ -288,153 +287,255 @@ function doConfirmedAdd() {
   showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
 }
 
-// ─── 기존 물품 재고 추가 ──────────────────────────────────────────────────────
+// ─── 출고 물품 처리 ──────────────────────────────────────────────────────────
 
-function openAddStockModal() {
-  const modal = document.getElementById('addStockModal');
+function fuzzyMatchBest(query) {
+  if (!query.trim()) return null;
+  const tokens = query.toLowerCase().trim().split(/\s+/);
+  const seen = new Set();
+  for (const item of state.items) {
+    if (seen.has(item.code)) continue;
+    seen.add(item.code);
+    const haystack = `${item.code} ${(item.name || '').toLowerCase()}`;
+    if (tokens.every(t => haystack.includes(t))) return item;
+  }
+  return null;
+}
+
+function getGroupStock(code) {
+  const rows = state.items.filter(i => i.code === code);
+  const totalBoxes = rows.reduce((s, r) => s + (r.stockBoxes || 0), 0);
+  const totalUnits = rows.reduce((s, r) => s + (r.unitQty || 0), 0);
+  const totalStock = rows.reduce((s, r) => s + (r.totalStock || 0), 0);
+  const withExpiry = rows
+    .map(r => ({ raw: r.expiryRaw, info: parseExpiry(r.expiryRaw, r.expiryPeriod) }))
+    .filter(x => x.info.daysLeft !== null && x.info.daysLeft >= 0)
+    .sort((a, b) => a.info.daysLeft - b.info.daysLeft);
+  return { totalBoxes, totalUnits, totalStock, earliestExpiry: withExpiry[0]?.raw || null };
+}
+
+function parseOutgoingLine(line) {
+  const slashIdx = line.trim().lastIndexOf('/');
+  if (slashIdx === -1) return null;
+  const nameQuery = line.slice(0, slashIdx).trim();
+  const qtyStr = line.slice(slashIdx + 1).trim();
+  let stockBoxes = 0, unitQty = 0;
+  const segments = qtyStr.split(',').map(s => s.trim());
+  for (const seg of segments) {
+    const boxM = seg.match(/(\d+)\s*박스/);
+    const unitM = seg.match(/(\d+)\s*개/);
+    if (boxM) stockBoxes = parseInt(boxM[1]);
+    else if (unitM) unitQty = parseInt(unitM[1]);
+    else { const n = parseInt(seg); if (!isNaN(n) && stockBoxes === 0 && unitQty === 0) stockBoxes = n; }
+  }
+  return { nameQuery, qtyStr, stockBoxes, unitQty, matched: fuzzyMatchBest(nameQuery), skipped: false };
+}
+
+function openOutgoingModal() {
+  const modal = document.getElementById('outgoingModal');
   if (!modal) return;
-  _addStockSelected = [];
-  _pendingAddStockItems = null;
-  const si = document.getElementById('addStockSearch');
-  const sl = document.getElementById('addStockSearchList');
-  if (si) si.value = '';
-  if (sl) { sl.innerHTML = ''; sl.classList.remove('open'); }
-  document.getElementById('addStockInputView').style.display = 'block';
-  document.getElementById('addStockConfirmView').style.display = 'none';
-  document.getElementById('addStockFooter1').style.display = 'flex';
-  document.getElementById('addStockFooter2').style.display = 'none';
+  _outgoingLines = null;
+  const textarea = document.getElementById('outgoingText');
+  if (textarea) textarea.value = '';
+  document.getElementById('outgoingInputView').style.display = 'block';
+  document.getElementById('outgoingPreviewView').style.display = 'none';
+  document.getElementById('outgoingFooter1').style.display = 'flex';
+  document.getElementById('outgoingFooter2').style.display = 'none';
   const title = modal.querySelector('.modal-title');
-  if (title) title.textContent = '기존 물품에 재고 추가';
-  renderAddStockList();
+  if (title) title.textContent = '출고 물품 입력';
   modal.style.display = 'flex';
 }
 
-function renderAddStockList() {
-  const listEl = document.getElementById('addStockSelectedList');
-  if (!listEl) return;
-
-  if (_addStockSelected.length === 0) {
-    listEl.innerHTML = '<p class="add-stock-hint">위에서 물품을 검색해 선택하세요</p>';
+function showOutgoingPreview() {
+  const text = document.getElementById('outgoingText').value;
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) {
+    showToast('출고할 항목을 입력해주세요.', 'error');
     return;
   }
+  _outgoingLines = lines.map(parseOutgoingLine).filter(Boolean);
+  if (_outgoingLines.length === 0) {
+    showToast('올바른 형식으로 입력해주세요. (품명/ 수량)', 'error');
+    return;
+  }
+  renderOutgoingPreview();
+  document.getElementById('outgoingInputView').style.display = 'none';
+  document.getElementById('outgoingPreviewView').style.display = 'block';
+  document.getElementById('outgoingFooter1').style.display = 'none';
+  document.getElementById('outgoingFooter2').style.display = 'flex';
+  const title = document.querySelector('#outgoingModal .modal-title');
+  if (title) title.textContent = `${_outgoingLines.length}개 항목 — 출고 확인`;
+}
 
-  listEl.innerHTML = _addStockSelected.map((item, idx) => `
-    <div class="add-stock-row">
-      <div class="asr-header">
-        <div class="asr-info">
-          <span class="asr-code">${item.code}</span>
-          <span class="asr-name">${escapeHtml(item.name)}</span>
-        </div>
-        <button type="button" class="asr-remove" data-idx="${idx}" title="제거">✕</button>
-      </div>
-      <div class="asr-inputs">
-        <input type="text" class="asr-qty form-input" data-idx="${idx}"
-               placeholder="수량 (예: 3박스, 50개)" value="${escapeHtml(item.qtyStr || '')}">
-        <input type="text" class="asr-expiry form-input" data-idx="${idx}"
-               placeholder="소비기한 (생략 시 기존 기준)" value="${escapeHtml(item.expiryStr || '')}">
-      </div>
-    </div>`
-  ).join('');
+function renderOutgoingPreview() {
+  const contentEl = document.getElementById('outgoingPreviewContent');
+  if (!contentEl || !_outgoingLines) return;
 
-  listEl.querySelectorAll('.asr-qty').forEach(inp => {
+  const unmatched = _outgoingLines.filter(l => !l.matched && !l.skipped);
+  let html = '';
+  if (unmatched.length > 0) {
+    html += `<div class="og-warning">⚠️ ${unmatched.length}개 항목의 품명을 찾지 못했습니다. 수정하거나 건너뛰어 주세요.</div>`;
+  }
+  html += `<div class="og-preview-list">`;
+  _outgoingLines.forEach((line, idx) => { html += renderOutgoingLine(line, idx); });
+  html += `</div>`;
+  contentEl.innerHTML = html;
+
+  // 미매칭 — 재검색 input
+  contentEl.querySelectorAll('.og-search-input').forEach(inp => {
+    const idx = parseInt(inp.dataset.idx);
+    const resultsEl = inp.parentElement.querySelector('.og-search-results');
     inp.addEventListener('input', () => {
-      const i = parseInt(inp.dataset.idx);
-      if (_addStockSelected[i]) _addStockSelected[i].qtyStr = inp.value;
+      const q = inp.value;
+      if (!q.trim()) { if (resultsEl) { resultsEl.innerHTML = ''; resultsEl.style.display = 'none'; } return; }
+      const hits = fuzzyMatchItems(q);
+      if (!resultsEl) return;
+      if (hits.length === 0) {
+        resultsEl.innerHTML = '<li class="qs-no-result">검색 결과 없음</li>';
+      } else {
+        resultsEl.innerHTML = hits.map(item =>
+          `<li class="qs-item" data-code="${item.code}" data-name="${escapeHtml(item.name)}" data-idx="${idx}">
+            <span class="qs-code">${item.code}</span>
+            <span class="qs-name">${escapeHtml(item.name)}</span>
+            <span class="qs-stock">${(item.totalStock||0).toLocaleString()}개</span>
+          </li>`
+        ).join('');
+        resultsEl.querySelectorAll('.qs-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const i = parseInt(el.dataset.idx);
+            _outgoingLines[i].matched = state.items.find(it => it.code === parseInt(el.dataset.code));
+            _outgoingLines[i].skipped = false;
+            renderOutgoingPreview();
+          });
+        });
+      }
+      resultsEl.style.display = 'block';
     });
   });
-  listEl.querySelectorAll('.asr-expiry').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const i = parseInt(inp.dataset.idx);
-      if (_addStockSelected[i]) _addStockSelected[i].expiryStr = inp.value;
-    });
-  });
-  listEl.querySelectorAll('.asr-remove').forEach(btn => {
+
+  // 건너뜀 버튼
+  contentEl.querySelectorAll('.og-skip-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      _addStockSelected.splice(parseInt(btn.dataset.idx), 1);
-      renderAddStockList();
+      const idx = parseInt(btn.dataset.idx);
+      _outgoingLines[idx].skipped = !_outgoingLines[idx].skipped;
+      if (_outgoingLines[idx].skipped) _outgoingLines[idx].matched = null;
+      renderOutgoingPreview();
     });
+  });
+
+  // 검색 변경 버튼 (매칭 취소 후 재검색 허용)
+  contentEl.querySelectorAll('.og-rematch-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      _outgoingLines[idx].matched = null;
+      _outgoingLines[idx].skipped = false;
+      renderOutgoingPreview();
+    });
+  });
+
+  // 출고하기 버튼 — 미매칭·미건너뜀 없을 때만 활성화
+  const active = _outgoingLines.filter(l => !l.matched && !l.skipped).length === 0;
+  const confirmBtn = document.getElementById('outgoingConfirmBtn');
+  if (confirmBtn) {
+    confirmBtn.disabled = !active;
+    confirmBtn.title = active ? '' : '미매칭 항목이 있습니다. 수정하거나 건너뛰어 주세요.';
+  }
+}
+
+function renderOutgoingLine(line, idx) {
+  if (line.skipped) {
+    return `<div class="og-row og-skipped">
+      <span class="og-status-icon">⏭</span>
+      <span class="og-original-query">${escapeHtml(line.nameQuery)} / ${escapeHtml(line.qtyStr)}</span>
+      <button class="og-skip-btn btn btn-outline" data-idx="${idx}" style="font-size:11px;padding:2px 8px;">건너뜀 취소</button>
+    </div>`;
+  }
+
+  if (line.matched) {
+    const gs = getGroupStock(line.matched.code);
+    const deductStr = [
+      line.stockBoxes > 0 ? `${line.stockBoxes}박스` : '',
+      line.unitQty > 0 ? `${line.unitQty}개` : ''
+    ].filter(Boolean).join(' ');
+    const afterTotal = gs.totalStock - (line.stockBoxes * (line.matched.boxQty || 1)) - line.unitQty;
+    const afterOk = afterTotal >= 0;
+    return `<div class="og-row og-matched">
+      <div class="og-row-header">
+        <span class="og-status-icon">✅</span>
+        <span class="og-original-query">${escapeHtml(line.nameQuery)}</span>
+        <button class="og-rematch-btn" data-idx="${idx}">검색 변경</button>
+      </div>
+      <div class="og-match-info">
+        <span class="og-full-name">${escapeHtml(line.matched.name)}</span>
+      </div>
+      <div class="og-numbers">
+        <span class="og-deduct">− ${deductStr}</span>
+        <span class="og-stock-after" ${!afterOk ? 'style="color:var(--danger);font-weight:700"' : ''}>
+          출고 후: ${afterOk ? afterTotal.toLocaleString() + '개' : '재고 부족!'}
+        </span>
+        ${gs.earliestExpiry ? `<span class="og-expiry">소비기한: ${escapeHtml(gs.earliestExpiry)}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // 미매칭
+  return `<div class="og-row og-unmatched">
+    <div class="og-row-header">
+      <span class="og-status-icon">⚠️</span>
+      <span class="og-original-query">${escapeHtml(line.nameQuery)} / ${escapeHtml(line.qtyStr)}</span>
+      <button class="og-skip-btn btn btn-outline" data-idx="${idx}" style="font-size:11px;padding:2px 8px;">건너뜀</button>
+    </div>
+    <div class="og-fix-area" style="position:relative">
+      <input type="text" class="og-search-input form-input" data-idx="${idx}"
+             placeholder="품명 또는 코드 재검색..." style="font-size:13px;margin-bottom:0">
+      <ul class="og-search-results" style="display:none;position:absolute;z-index:100;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);width:100%;list-style:none;padding:0;margin:0;max-height:180px;overflow-y:auto;top:100%;left:0"></ul>
+    </div>
+  </div>`;
+}
+
+function processOutgoing(outLines) {
+  outLines.filter(l => l.matched && !l.skipped).forEach(line => {
+    const rows = state.items.filter(i => i.code === line.matched.code)
+      .sort((a, b) => {
+        const da = parseExpiry(a.expiryRaw, a.expiryPeriod).daysLeft;
+        const db = parseExpiry(b.expiryRaw, b.expiryPeriod).daysLeft;
+        if (da === null) return 1; if (db === null) return -1; return da - db;
+      });
+    let remainBoxes = line.stockBoxes, remainUnits = line.unitQty;
+    for (const row of rows) {
+      if (remainBoxes <= 0 && remainUnits <= 0) break;
+      const takeBoxes = Math.min(remainBoxes, row.stockBoxes || 0);
+      row.stockBoxes = (row.stockBoxes || 0) - takeBoxes; remainBoxes -= takeBoxes;
+      const takeUnits = Math.min(remainUnits, row.unitQty || 0);
+      row.unitQty = (row.unitQty || 0) - takeUnits; remainUnits -= takeUnits;
+      row.totalStock = row.stockBoxes * (row.boxQty || 1) + row.unitQty;
+    }
   });
 }
 
-function showAddStockConfirm() {
-  // 입력값 최종 수집 (포커스 유지 상태에서 놓친 경우 대비)
-  const listEl = document.getElementById('addStockSelectedList');
-  if (listEl) {
-    listEl.querySelectorAll('.asr-qty').forEach(inp => {
-      const i = parseInt(inp.dataset.idx);
-      if (_addStockSelected[i]) _addStockSelected[i].qtyStr = inp.value;
-    });
-    listEl.querySelectorAll('.asr-expiry').forEach(inp => {
-      const i = parseInt(inp.dataset.idx);
-      if (_addStockSelected[i]) _addStockSelected[i].expiryStr = inp.value;
-    });
-  }
+function doConfirmedOutgoing() {
+  if (!_outgoingLines || _outgoingLines.length === 0) return;
+  const toProcess = _outgoingLines.filter(l => l.matched && !l.skipped);
+  if (toProcess.length === 0) { showToast('출고할 항목이 없습니다.', 'error'); return; }
 
-  if (_addStockSelected.length === 0) {
-    showToast('추가할 물품을 선택해주세요.', 'error');
-    return;
-  }
-  const noQty = _addStockSelected.filter(s => !s.qtyStr.trim());
-  if (noQty.length > 0) {
-    showToast(`수량을 입력해주세요: ${noQty.map(s => s.name).join(', ')}`, 'error');
-    return;
-  }
+  // 되돌리기용 스냅샷
+  const snapshots = [];
+  toProcess.forEach(line => {
+    state.items.filter(i => i.code === line.matched.code).forEach(r => snapshots.push({ ...r }));
+  });
 
-  _pendingAddStockItems = _addStockSelected.map(item => {
-    const parsed = parseTextEntry(`${item.code}/${item.name}/${item.qtyStr}/${item.expiryStr || ''}`);
-    if (!parsed) return null;
-    // 소비기한 생략 시 기존 재고 중 가장 빠른 날짜 자동 적용
-    if (!parsed.expiryRaw) {
-      const withExpiry = state.items
-        .filter(i => i.code === parsed.code)
-        .map(i => ({ raw: i.expiryRaw, info: parseExpiry(i.expiryRaw, i.expiryPeriod) }))
-        .filter(x => x.info.daysLeft !== null && x.info.daysLeft >= 0)
-        .sort((a, b) => a.info.daysLeft - b.info.daysLeft);
-      if (withExpiry.length > 0) { parsed.expiryRaw = withExpiry[0].raw; parsed._autoExpiry = true; }
-    }
-    return parsed;
-  }).filter(Boolean);
-
-  const rows = _pendingAddStockItems.map(e => {
-    const expCell = e.expiryRaw
-      ? `${escapeHtml(e.expiryRaw)}${e._autoExpiry ? ' <span class="auto-expiry">(기존 기준)</span>' : ''}`
-      : `<span class="no-expiry">없음</span>`;
-    return `<tr>
-      <td class="ct-code">${e.code}</td>
-      <td class="ct-name">${escapeHtml(e.name)}</td>
-      <td class="ct-qty">${formatAddQty(e)}</td>
-      <td class="ct-exp">${expCell}</td>
-    </tr>`;
-  }).join('');
-
-  document.getElementById('addStockConfirmTable').innerHTML = `
-    <table class="confirm-table">
-      <thead><tr><th>코드</th><th>품명</th><th>수량</th><th>소비기한</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-
-  document.getElementById('addStockInputView').style.display = 'none';
-  document.getElementById('addStockConfirmView').style.display = 'block';
-  document.getElementById('addStockFooter1').style.display = 'none';
-  document.getElementById('addStockFooter2').style.display = 'flex';
-  const title = document.querySelector('#addStockModal .modal-title');
-  if (title) title.textContent = `${_pendingAddStockItems.length}개 항목 — 등록 확인`;
-}
-
-function doConfirmedAddStock() {
-  if (!_pendingAddStockItems || _pendingAddStockItems.length === 0) return;
-  const beforeIds = new Set(state.items.map(i => i.id));
-  addItems(state.items, _pendingAddStockItems);
-  const addedIds = state.items.filter(i => !beforeIds.has(i.id)).map(i => i.id);
-  const label = _pendingAddStockItems.length === 1
-    ? _pendingAddStockItems[0].name
-    : `${_pendingAddStockItems[0].name} 외 ${_pendingAddStockItems.length - 1}개`;
+  processOutgoing(_outgoingLines);
   saveInventory(state.items);
-  addLogEntry('add', label, { ids: addedIds });
-  _pendingAddStockItems = null;
-  closeModal('addStockModal');
+
+  const label = toProcess.length === 1
+    ? toProcess[0].matched.name
+    : `${toProcess[0].matched.name} 외 ${toProcess.length - 1}개`;
+  addLogEntry('out', label, { snapshots });
+
+  _outgoingLines = null;
+  closeModal('outgoingModal');
   renderAll();
-  showToast(`${addedIds.length}개 항목이 추가되었습니다.`, 'success');
+  showToast(`${toProcess.length}개 항목이 출고되었습니다.`, 'success');
 }
 
 // ─── 품목 축약어 퍼지 검색 ────────────────────────────────────────────────────
@@ -784,63 +885,25 @@ function setupModals() {
     });
   }
 
-  // 기존 물품 모달 — 검색
-  const si = document.getElementById('addStockSearch');
-  const sl = document.getElementById('addStockSearchList');
-  if (si && sl) {
-    si.addEventListener('input', () => {
-      const q = si.value;
-      if (!q.trim()) { sl.classList.remove('open'); sl.innerHTML = ''; return; }
-      const hits = fuzzyMatchItems(q);
-      if (hits.length === 0) {
-        sl.innerHTML = '<li class="qs-no-result">검색 결과 없음</li>';
-      } else {
-        sl.innerHTML = hits.map(item =>
-          `<li class="qs-item" data-code="${item.code}" data-name="${escapeHtml(item.name)}">
-            <span class="qs-code">${item.code}</span>
-            <span class="qs-name">${escapeHtml(item.name)}</span>
-            <span class="qs-stock">${(item.totalStock||0).toLocaleString()}개</span>
-          </li>`
-        ).join('');
-        sl.querySelectorAll('.qs-item').forEach(el => {
-          el.addEventListener('click', () => {
-            const code = parseInt(el.dataset.code);
-            if (_addStockSelected.find(s => s.code === code)) {
-              showToast('이미 선택된 항목입니다.', 'info');
-            } else {
-              _addStockSelected.push({ code, name: el.dataset.name, qtyStr: '', expiryStr: '' });
-              renderAddStockList();
-            }
-            si.value = ''; sl.classList.remove('open'); sl.innerHTML = '';
-          });
-        });
-      }
-      sl.classList.add('open');
-    });
-    document.addEventListener('click', (e) => {
-      if (!e.target.closest('#addStockModal')) sl.classList.remove('open');
+  // 출고 물품 모달 — 미리보기/수정/출고 버튼
+  const outgoingPreviewBtn = document.getElementById('outgoingPreviewBtn');
+  if (outgoingPreviewBtn) outgoingPreviewBtn.addEventListener('click', showOutgoingPreview);
+
+  const outgoingBackBtn = document.getElementById('outgoingBackBtn');
+  if (outgoingBackBtn) {
+    outgoingBackBtn.addEventListener('click', () => {
+      document.getElementById('outgoingInputView').style.display = 'block';
+      document.getElementById('outgoingPreviewView').style.display = 'none';
+      document.getElementById('outgoingFooter1').style.display = 'flex';
+      document.getElementById('outgoingFooter2').style.display = 'none';
+      const title = document.querySelector('#outgoingModal .modal-title');
+      if (title) title.textContent = '출고 물품 입력';
+      _outgoingLines = null;
     });
   }
 
-  // 기존 물품 모달 — 다음/수정/등록 버튼
-  const addStockPreviewBtn = document.getElementById('addStockPreviewBtn');
-  if (addStockPreviewBtn) addStockPreviewBtn.addEventListener('click', showAddStockConfirm);
-
-  const addStockBackBtn = document.getElementById('addStockBackBtn');
-  if (addStockBackBtn) {
-    addStockBackBtn.addEventListener('click', () => {
-      document.getElementById('addStockInputView').style.display = 'block';
-      document.getElementById('addStockConfirmView').style.display = 'none';
-      document.getElementById('addStockFooter1').style.display = 'flex';
-      document.getElementById('addStockFooter2').style.display = 'none';
-      const title = document.querySelector('#addStockModal .modal-title');
-      if (title) title.textContent = '기존 물품에 재고 추가';
-      _pendingAddStockItems = null;
-    });
-  }
-
-  const addStockConfirmBtn = document.getElementById('addStockConfirmBtn');
-  if (addStockConfirmBtn) addStockConfirmBtn.addEventListener('click', doConfirmedAddStock);
+  const outgoingConfirmBtn = document.getElementById('outgoingConfirmBtn');
+  if (outgoingConfirmBtn) outgoingConfirmBtn.addEventListener('click', doConfirmedOutgoing);
 
   // 추가 텍스트 미리보기
   const addText = document.getElementById('addText');
@@ -935,9 +998,9 @@ function setupGlobalEvents() {
   const addBtn = document.getElementById('addItemBtn');
   if (addBtn) addBtn.addEventListener('click', openAddModal);
 
-  // 기존 물품 재고 추가 버튼
-  const addStockBtn = document.getElementById('addStockBtn');
-  if (addStockBtn) addStockBtn.addEventListener('click', openAddStockModal);
+  // 출고 물품 버튼
+  const outgoingBtn = document.getElementById('outgoingBtn');
+  if (outgoingBtn) outgoingBtn.addEventListener('click', openOutgoingModal);
 
   // 소비기한 임박 필터 토글
   const expiringSoonBtn = document.getElementById('expiringSoonBtn');
@@ -1069,8 +1132,8 @@ function renderLogPanel() {
     return;
   }
 
-  const ACTION_LABEL = { add: '추가', edit: '수정', delete: '삭제' };
-  const ACTION_CLASS = { add: 'log-add', edit: 'log-edit', delete: 'log-del' };
+  const ACTION_LABEL = { add: '추가', edit: '수정', delete: '삭제', out: '출고' };
+  const ACTION_CLASS = { add: 'log-add', edit: 'log-edit', delete: 'log-del', out: 'log-out' };
   const pad = n => String(n).padStart(2, '0');
 
   listEl.innerHTML = log.map(entry => {
@@ -1097,7 +1160,7 @@ function revertLogEntry(logId) {
   const entry = log.find(e => e.id === logId);
   if (!entry) return;
 
-  const actionLabel = { add: '추가', edit: '수정', delete: '삭제' }[entry.action];
+  const actionLabel = { add: '추가', edit: '수정', delete: '삭제', out: '출고' }[entry.action];
   if (!confirm(`"${entry.label}" ${actionLabel} 작업을 되돌리시겠습니까?`)) return;
 
   if (entry.action === 'edit') {
@@ -1111,6 +1174,11 @@ function revertLogEntry(logId) {
     });
   } else if (entry.action === 'delete') {
     entry.undoData.items.forEach(item => state.items.push({ ...item }));
+  } else if (entry.action === 'out') {
+    entry.undoData.snapshots.forEach(snap => {
+      const idx = state.items.findIndex(i => i.id === snap.id);
+      if (idx !== -1) state.items[idx] = { ...snap };
+    });
   }
 
   saveInventory(state.items);

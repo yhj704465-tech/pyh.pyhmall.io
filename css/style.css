@@ -1143,7 +1143,87 @@ textarea.form-input {
   .log-panel { display: none !important; }
 }
 
-/* ── 기존 물품 재고 추가 모달 ──────────────────────────── */
+/* ── 위험(빨강) 버튼 ───────────────────────────────────── */
+.btn-danger {
+  padding: 8px 18px;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+.btn-danger:hover { background: #dc2626; }
+.btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── 넓은 모달 ─────────────────────────────────────────── */
+.modal-box-wide { max-width: 680px; }
+
+/* ── 출고 미리보기 ─────────────────────────────────────── */
+.og-warning {
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: #92400e;
+  margin-bottom: 12px;
+}
+.og-preview-list { display: flex; flex-direction: column; gap: 8px; }
+
+.og-row {
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+}
+.og-matched  { background: #f0fdf4; border-color: #86efac; }
+.og-unmatched{ background: #fff7ed; border-color: #fdba74; }
+.og-skipped  { background: var(--surface2); opacity: 0.6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.og-row-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.og-status-icon { font-size: 15px; flex-shrink: 0; }
+.og-original-query { font-size: 12px; color: var(--text-sub); font-style: italic; flex: 1; }
+.og-rematch-btn {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 2px 7px;
+  transition: all 0.15s;
+}
+.og-rematch-btn:hover { background: var(--border); color: var(--text); }
+
+.og-match-info { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.og-full-name  { font-size: 13px; font-weight: 600; color: var(--text); }
+
+.og-numbers {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.og-deduct     { color: var(--danger); font-weight: 700; }
+.og-stock-after{ color: var(--text-sub); }
+.og-expiry     { color: var(--text-muted); }
+
+.og-fix-area {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.og-fix-area .quick-search-wrap { flex: 1; margin-bottom: 0; padding-bottom: 0; border: none; }
+.og-skip-btn { flex-shrink: 0; padding: 7px 10px; font-size: 12px; }
+
+/* 출고 로그 배지 */
+.log-out { background: #431407; color: #fdba74; }
+
+/* ── 기존 물품 재고 추가 모달 (legacy, unused) ─────────── */
 .add-stock-list {
   display: flex;
   flex-direction: column;

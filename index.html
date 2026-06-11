@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611g">
+  <link rel="stylesheet" href="css/style.css?v=20260611i">
 </head>
 <body>
 
@@ -40,7 +40,7 @@
     </div>
     <div id="adminControls">
       <button id="addItemBtn"  class="btn btn-primary">➕ 새 물품</button>
-      <button id="addStockBtn" class="btn btn-outline">📦 기존 물품</button>
+      <button id="outgoingBtn" class="btn btn-outline">📤 출고 물품</button>
       <button id="exportBtn"   class="btn btn-outline">📥 CSV</button>
       <button id="logoutBtn" class="btn-logout">로그아웃</button>
     </div>
@@ -251,38 +251,40 @@
   </div>
 </div>
 
-<!-- ─── 기존 물품 재고 추가 모달 ──────────────────────────── -->
-<div id="addStockModal" class="modal-overlay">
-  <div class="modal-box">
+<!-- ─── 출고 물품 모달 ────────────────────────────────────── -->
+<div id="outgoingModal" class="modal-overlay">
+  <div class="modal-box modal-box-wide">
     <div class="modal-header">
-      <span class="modal-title">기존 물품에 재고 추가</span>
+      <span class="modal-title">출고 물품 입력</span>
       <button class="modal-close" type="button">✕</button>
     </div>
     <div class="modal-body">
-      <!-- Step 1: 선택 -->
-      <div id="addStockInputView">
-        <div class="quick-search-wrap">
-          <label class="form-label">물품 검색 (축약어 가능)</label>
-          <input type="text" id="addStockSearch" class="form-input" placeholder="예: g7 100개입, 스위트칠리, 코코넛">
-          <ul id="addStockSearchList" class="quick-search-list"></ul>
+      <!-- Step 1: 텍스트 입력 -->
+      <div id="outgoingInputView">
+        <div class="add-hint">
+          <strong>입력 형식</strong> (한 줄에 1개, 품명은 축약어 가능)<br>
+          <code>품명/ 수량</code><br><br>
+          <strong>수량:</strong> <code>3박스</code> · <code>50개</code> · <code>3박스,5개</code>
         </div>
-        <div id="addStockSelectedList" class="add-stock-list">
-          <p class="add-stock-hint">위에서 물품을 검색해 선택하세요</p>
+        <div class="form-group">
+          <label class="form-label">출고 품목 입력</label>
+          <textarea id="outgoingText" class="form-input" rows="8"
+            placeholder="예시:&#10;코케 땅콩과자 코코넛크림/ 1박스&#10;유즈풀 파프리카/ 3박스&#10;아로이 자색고구마/ 3박스&#10;응우엔 150g/ 1박스&#10;아치카페 두리안 222g/ 2박스"></textarea>
         </div>
+        <div id="outgoingInputPreview"></div>
       </div>
-      <!-- Step 2: 등록 확인 -->
-      <div id="addStockConfirmView" style="display:none">
-        <p class="confirm-question">아래 항목들을 등록하시겠습니까?</p>
-        <div id="addStockConfirmTable" class="confirm-table-wrap"></div>
+      <!-- Step 2: 매칭 결과 미리보기 + 수정 -->
+      <div id="outgoingPreviewView" style="display:none">
+        <div id="outgoingPreviewContent"></div>
       </div>
     </div>
-    <div class="modal-footer" id="addStockFooter1">
+    <div class="modal-footer" id="outgoingFooter1">
       <button class="btn btn-outline modal-close" type="button">취소</button>
-      <button class="btn btn-primary" id="addStockPreviewBtn" type="button">다음 →</button>
+      <button class="btn btn-primary" id="outgoingPreviewBtn" type="button">미리보기 →</button>
     </div>
-    <div class="modal-footer" id="addStockFooter2" style="display:none">
-      <button class="btn btn-outline" id="addStockBackBtn" type="button">← 수정</button>
-      <button class="btn btn-success" id="addStockConfirmBtn" type="button">✓ 등록하기</button>
+    <div class="modal-footer" id="outgoingFooter2" style="display:none">
+      <button class="btn btn-outline" id="outgoingBackBtn" type="button">← 수정</button>
+      <button class="btn btn-danger" id="outgoingConfirmBtn" type="button">✓ 출고하기</button>
     </div>
   </div>
 </div>
@@ -294,10 +296,10 @@
 <button id="scrollTopBtn" class="scroll-top-btn" title="맨 위로" type="button">▲</button>
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
-<script src="js/data.js?v=20260611g"></script>
-<script src="js/auth.js?v=20260611g"></script>
-<script src="js/inventory.js?v=20260611g"></script>
-<script src="js/app.js?v=20260611g"></script>
+<script src="js/data.js?v=20260611i"></script>
+<script src="js/auth.js?v=20260611i"></script>
+<script src="js/inventory.js?v=20260611i"></script>
+<script src="js/app.js?v=20260611i"></script>
 
 </body>
 </html>
