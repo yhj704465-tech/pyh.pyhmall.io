@@ -896,6 +896,69 @@ textarea.form-input {
 .text-muted { color: var(--text-muted); }
 .separator  { width: 1px; height: 20px; background: rgba(255,255,255,0.2); }
 
+/* ── 추가 모달 품목 빠른 검색 ──────────────────────────── */
+.quick-search-wrap {
+  position: relative;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--border);
+}
+
+.quick-search-list {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  list-style: none;
+  z-index: 300;
+  max-height: 220px;
+  overflow-y: auto;
+  display: none;
+}
+.quick-search-list.open { display: block; }
+
+.qs-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.qs-item:last-child { border-bottom: none; }
+.qs-item:hover { background: var(--primary-light); }
+
+.qs-code {
+  font-size: 11px;
+  color: var(--text-sub);
+  flex-shrink: 0;
+  min-width: 28px;
+  font-weight: 600;
+}
+.qs-name {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qs-stock {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.qs-no-result {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 /* ── 변경 이력 패널 ────────────────────────────────────── */
 .log-panel {
   width: 264px;

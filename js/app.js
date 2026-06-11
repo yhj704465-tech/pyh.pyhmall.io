@@ -216,6 +216,25 @@ function renderAutocomplete(suggestions, dropdown, input) {
   });
 }
 
+// ─── 품목 축약어 퍼지 검색 ────────────────────────────────────────────────────
+
+function fuzzyMatchItems(query) {
+  if (!query.trim()) return [];
+  const tokens = query.toLowerCase().trim().split(/\s+/);
+  const seen = new Set();
+  const results = [];
+  for (const item of state.items) {
+    if (seen.has(item.code)) continue;
+    seen.add(item.code);
+    const haystack = `${item.code} ${(item.name || '').toLowerCase()}`;
+    if (tokens.every(t => haystack.includes(t))) {
+      results.push(item);
+      if (results.length >= 8) break;
+    }
+  }
+  return results;
+}
+
 // ─── 메인 렌더링 ─────────────────────────────────────────────────────────────
 
 function renderAll() {
@@ -478,6 +497,10 @@ function openAddModal() {
   if (!modal) return;
   document.getElementById('addText').value = '';
   document.getElementById('addResult').innerHTML = '';
+  const qi = document.getElementById('quickSearchInput');
+  const ql = document.getElementById('quickSearchList');
+  if (qi) qi.value = '';
+  if (ql) { ql.innerHTML = ''; ql.classList.remove('open'); }
   modal.style.display = 'flex';
 }
 
@@ -523,6 +546,50 @@ function setupModals() {
       closeModal('editModal');
       renderAll();
       showToast('수정되었습니다.', 'success');
+    });
+  }
+
+  // 추가 모달 — 품목 빠른 검색
+  const qInput = document.getElementById('quickSearchInput');
+  const qList  = document.getElementById('quickSearchList');
+  if (qInput && qList) {
+    qInput.addEventListener('input', () => {
+      const q = qInput.value;
+      if (!q.trim()) { qList.classList.remove('open'); qList.innerHTML = ''; return; }
+
+      const hits = fuzzyMatchItems(q);
+      if (hits.length === 0) {
+        qList.innerHTML = '<li class="qs-no-result">검색 결과 없음</li>';
+      } else {
+        qList.innerHTML = hits.map(item =>
+          `<li class="qs-item" data-code="${item.code}" data-name="${escapeHtml(item.name)}">
+            <span class="qs-code">${item.code}</span>
+            <span class="qs-name">${escapeHtml(item.name)}</span>
+            <span class="qs-stock">${(item.totalStock||0).toLocaleString()}개</span>
+          </li>`
+        ).join('');
+        qList.querySelectorAll('.qs-item').forEach(el => {
+          el.addEventListener('click', () => {
+            const line = `${el.dataset.code}/${el.dataset.name}/`;
+            const ta = document.getElementById('addText');
+            if (ta) {
+              ta.value = ta.value ? ta.value + '\n' + line : line;
+              ta.dispatchEvent(new Event('input'));
+              ta.focus();
+              ta.setSelectionRange(ta.value.length, ta.value.length);
+            }
+            qInput.value = '';
+            qList.classList.remove('open');
+            qList.innerHTML = '';
+            showToast('수량과 소비기한을 이어서 입력해주세요.', 'info');
+          });
+        });
+      }
+      qList.classList.add('open');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.quick-search-wrap')) qList.classList.remove('open');
     });
   }
 

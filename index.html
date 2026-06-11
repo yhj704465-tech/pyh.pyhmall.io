@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611d">
+  <link rel="stylesheet" href="css/style.css?v=20260611e">
 </head>
 <body>
 
@@ -219,6 +219,11 @@
       <button class="modal-close">✕</button>
     </div>
     <div class="modal-body">
+      <div class="quick-search-wrap">
+        <label class="form-label">기존 품목 검색 (축약어 가능)</label>
+        <input type="text" id="quickSearchInput" class="form-input" placeholder="예: g7 100개입, 스위트칠리, 코코넛">
+        <ul id="quickSearchList" class="quick-search-list"></ul>
+      </div>
       <div class="add-hint">
         <strong>입력 형식</strong> (한 줄에 1개 항목, 엔터로 구분)<br>
         <code>품목코드/품명/수량/소비기한</code> 또는 <code>품명/수량/소비기한</code><br><br>
@@ -244,10 +249,10 @@
 <div id="toastContainer"></div>
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
-<script src="js/data.js?v=20260611d"></script>
-<script src="js/auth.js?v=20260611d"></script>
-<script src="js/inventory.js?v=20260611d"></script>
-<script src="js/app.js?v=20260611d"></script>
+<script src="js/data.js?v=20260611e"></script>
+<script src="js/auth.js?v=20260611e"></script>
+<script src="js/inventory.js?v=20260611e"></script>
+<script src="js/app.js?v=20260611e"></script>
 
 </body>
 </html>
