@@ -1466,15 +1466,28 @@ function mergeIdenticalItems() {
     }
   });
 
-  if (dupCount === 0) {
+  const merged = Array.from(map.values());
+
+  // 재고 0 + 소비기한 없는 항목 제거
+  const before = merged.length;
+  const cleaned = merged.filter(item =>
+    (item.stockBoxes || 0) !== 0 || (item.unitQty || 0) !== 0 || (item.expiryRaw || '').trim() !== ''
+  );
+  const removedCount = before - cleaned.length;
+
+  if (dupCount === 0 && removedCount === 0) {
     showToast('중복 항목이 없습니다.', 'success');
     return;
   }
 
-  state.items = Array.from(map.values());
+  state.items = cleaned;
   saveInventory(state.items);
   renderAll();
-  showToast(`${dupCount}개 중복 항목을 합쳤습니다.`, 'success');
+
+  const parts = [];
+  if (dupCount > 0)    parts.push(`${dupCount}개 중복 합산`);
+  if (removedCount > 0) parts.push(`${removedCount}개 빈 항목 삭제`);
+  showToast(parts.join(' · ') + ' 완료', 'success');
 }
 
 // ─── 삭제 확인 ────────────────────────────────────────────────────────────────
