@@ -1390,6 +1390,20 @@ function setupModals() {
   if (excelImportBtn) excelImportBtn.addEventListener('click', triggerExcelImport);
   const excelFileInput = document.getElementById('excelFileInput');
   if (excelFileInput) excelFileInput.addEventListener('change', handleExcelFileSelect);
+
+  // 전체 재고 초기화
+  const resetInventoryBtn = document.getElementById('resetInventoryBtn');
+  if (resetInventoryBtn) resetInventoryBtn.addEventListener('click', confirmResetInventory);
+}
+
+function confirmResetInventory() {
+  if (!confirm(`⚠️ 전체 재고를 초기화하시겠습니까?\n\n현재 등록된 ${state.items.length}개 항목이 모두 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.`)) return;
+  state.items = [];
+  saveInventory(state.items);
+  localStorage.removeItem(LOG_KEY);
+  localStorage.removeItem(OUT_LOG_KEY);
+  renderAll();
+  showToast('전체 재고가 초기화되었습니다.', 'success');
 }
 
 // ─── 삭제 확인 ────────────────────────────────────────────────────────────────
