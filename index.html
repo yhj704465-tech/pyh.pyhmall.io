@@ -6,7 +6,7 @@
   <meta name="description" content="물류창고 재고현황 관리 시스템">
   <meta name="theme-color" content="#0f172a">
   <title>물류창고 재고현황</title>
-  <link rel="stylesheet" href="css/style.css?v=20260611j">
+  <link rel="stylesheet" href="css/style.css?v=20260611k">
 </head>
 <body>
 
@@ -295,6 +295,21 @@
   </div>
 </div>
 
+<!-- ─── 되돌리기 확인 모달 ───────────────────────────────── -->
+<div id="revertModal" class="modal-overlay">
+  <div class="modal-box modal-box-wide">
+    <div class="modal-header">
+      <span class="modal-title">되돌리기 확인</span>
+      <button class="modal-close" type="button">✕</button>
+    </div>
+    <div class="modal-body" id="revertModalBody"></div>
+    <div class="modal-footer">
+      <button id="revertCancelBtn" class="btn btn-outline">아니오</button>
+      <button id="revertOkBtn"     class="btn btn-danger">예, 되돌립니다</button>
+    </div>
+  </div>
+</div>
+
 <!-- ─── 토스트 컨테이너 ────────────────────────────────── -->
 <div id="toastContainer"></div>
 
@@ -303,10 +318,10 @@
 
 <!-- ─── 스크립트 ──────────────────────────────────────── -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="js/data.js?v=20260611j"></script>
-<script src="js/auth.js?v=20260611j"></script>
-<script src="js/inventory.js?v=20260611j"></script>
-<script src="js/app.js?v=20260611j"></script>
+<script src="js/data.js?v=20260611k"></script>
+<script src="js/auth.js?v=20260611k"></script>
+<script src="js/inventory.js?v=20260611k"></script>
+<script src="js/app.js?v=20260611k"></script>
 
 </body>
 </html>

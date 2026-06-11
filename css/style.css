@@ -1258,6 +1258,43 @@ textarea.form-input {
 /* 출고 로그 배지 */
 .log-out { background: #431407; color: #fdba74; }
 
+/* ── 되돌리기 비교 테이블 ──────────────────────────────── */
+.rc-desc {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.rc-scroll { overflow-x: auto; }
+.rc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.rc-table th {
+  background: var(--surface2);
+  padding: 8px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-sub);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.rc-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.rc-table tr:last-child td { border-bottom: none; }
+.rc-table tr.rc-changed { background: #fef9c3; }
+.rc-field { font-weight: 600; color: var(--text-sub); white-space: nowrap; }
+.rc-before-val { color: #b45309; }
+.rc-after-val  { color: var(--success); font-weight: 600; }
+.rc-strike     { text-decoration: line-through; color: var(--danger); opacity: 0.8; }
+.rc-new        { color: var(--success); font-weight: 600; }
+.rc-num { text-align: right; font-variant-numeric: tabular-nums; }
+
 /* ── 기존 물품 재고 추가 모달 (legacy, unused) ─────────── */
 .add-stock-list {
   display: flex;

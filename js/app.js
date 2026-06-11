@@ -15,6 +15,7 @@ const MAX_LOG_ENTRIES = 30;
 
 let _pendingAddItems = null;
 let _outgoingLines = null;
+let _pendingRevertLogId = null;
 
 // ─── 초기화 ──────────────────────────────────────────────────────────────────
 
@@ -885,6 +886,12 @@ function setupModals() {
     });
   }
 
+  // 되돌리기 확인 모달
+  const revertOkBtn = document.getElementById('revertOkBtn');
+  if (revertOkBtn) revertOkBtn.addEventListener('click', doRevert);
+  const revertCancelBtn = document.getElementById('revertCancelBtn');
+  if (revertCancelBtn) revertCancelBtn.addEventListener('click', () => closeModal('revertModal'));
+
   // 출고 물품 모달 — 미리보기/수정/출고 버튼
   const outgoingPreviewBtn = document.getElementById('outgoingPreviewBtn');
   if (outgoingPreviewBtn) outgoingPreviewBtn.addEventListener('click', showOutgoingPreview);
@@ -1198,13 +1205,109 @@ function renderLogPanel() {
   });
 }
 
+function buildRevertCompareHTML(entry) {
+  const FIELDS = [
+    { key: 'code',         label: '품목코드' },
+    { key: 'name',         label: '품명' },
+    { key: 'stockBoxes',   label: '실재고(박스)' },
+    { key: 'unitQty',      label: '낱개수량' },
+    { key: 'boxQty',       label: '박스당수량' },
+    { key: 'totalStock',   label: '재고수량(총)' },
+    { key: 'expiryRaw',    label: '소비기한' },
+    { key: 'expiryPeriod', label: '소비기한기간' },
+  ];
+
+  if (entry.action === 'edit') {
+    const before = entry.undoData.before;
+    const after  = state.items.find(i => i.id === before.id) || {};
+    const rows = FIELDS.map(f => {
+      const bv = String(before[f.key] ?? '');
+      const av = String(after[f.key]  ?? '');
+      const changed = bv !== av;
+      return `<tr class="${changed ? 'rc-changed' : ''}">
+        <td class="rc-field">${f.label}</td>
+        <td>${changed ? `<span class="rc-strike">${escapeHtml(bv) || '—'}</span>` : escapeHtml(bv) || '—'}</td>
+        <td>${changed ? `<span class="rc-new">${escapeHtml(av) || '—'}</span>` : escapeHtml(av) || '—'}</td>
+      </tr>`;
+    }).join('');
+    return `<p class="rc-desc">수정 작업을 되돌리면 <strong>기존 내용</strong>으로 복원됩니다. (노란 행 = 변경된 항목)</p>
+      <div class="rc-scroll"><table class="rc-table">
+        <thead><tr><th>항목</th><th>기존 내용</th><th>변경 내용</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  }
+
+  if (entry.action === 'add') {
+    const items = entry.undoData.ids.map(id => state.items.find(i => i.id === id)).filter(Boolean);
+    const rows = items.map(item => `<tr>
+      <td class="rc-field">${item.code}</td>
+      <td>${escapeHtml(item.name)}</td>
+      <td class="rc-num">${(item.totalStock || 0).toLocaleString()}개</td>
+    </tr>`).join('');
+    return `<p class="rc-desc">추가 작업을 되돌리면 아래 항목들이 <strong>삭제</strong>됩니다.</p>
+      <div class="rc-scroll"><table class="rc-table">
+        <thead><tr><th>코드</th><th>품명</th><th>재고수량</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  }
+
+  if (entry.action === 'delete') {
+    const rows = entry.undoData.items.map(item => `<tr>
+      <td class="rc-field">${item.code}</td>
+      <td>${escapeHtml(item.name)}</td>
+      <td class="rc-num">${(item.totalStock || 0).toLocaleString()}개</td>
+    </tr>`).join('');
+    return `<p class="rc-desc">삭제 작업을 되돌리면 아래 항목들이 <strong>복원</strong>됩니다.</p>
+      <div class="rc-scroll"><table class="rc-table">
+        <thead><tr><th>코드</th><th>품명</th><th>재고수량</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  }
+
+  if (entry.action === 'out') {
+    const rows = entry.undoData.snapshots.map(snap => {
+      const cur = state.items.find(i => i.id === snap.id);
+      const stockBefore = snap.totalStock  || 0;
+      const stockAfter  = cur?.totalStock  || 0;
+      return `<tr>
+        <td class="rc-field">${snap.code}</td>
+        <td>${escapeHtml(snap.name)}</td>
+        <td class="rc-num rc-before-val">${stockBefore.toLocaleString()}개</td>
+        <td class="rc-num rc-after-val">${stockAfter.toLocaleString()}개</td>
+      </tr>`;
+    }).join('');
+    return `<p class="rc-desc">출고 작업을 되돌리면 아래 항목들의 재고가 <strong>복원</strong>됩니다.</p>
+      <div class="rc-scroll"><table class="rc-table">
+        <thead><tr><th>코드</th><th>품명</th><th>기존 재고</th><th>변경 재고</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
+  }
+
+  return `<p class="rc-desc">이 작업을 되돌리시겠습니까?</p>`;
+}
+
 function revertLogEntry(logId) {
   const log = loadLog();
   const entry = log.find(e => e.id === logId);
   if (!entry) return;
 
-  const actionLabel = { add: '추가', edit: '수정', delete: '삭제', out: '출고' }[entry.action];
-  if (!confirm(`"${entry.label}" ${actionLabel} 작업을 되돌리시겠습니까?`)) return;
+  _pendingRevertLogId = logId;
+  const body = document.getElementById('revertModalBody');
+  if (body) body.innerHTML = buildRevertCompareHTML(entry);
+  const actionLabel = { add: '추가', edit: '수정', delete: '삭제', out: '출고' }[entry.action] || '';
+  const title = document.querySelector('#revertModal .modal-title');
+  if (title) title.textContent = `되돌리기 확인 — ${entry.label} (${actionLabel})`;
+  document.getElementById('revertModal').style.display = 'flex';
+}
+
+function doRevert() {
+  const logId = _pendingRevertLogId;
+  _pendingRevertLogId = null;
+  closeModal('revertModal');
+
+  const log = loadLog();
+  const entry = log.find(e => e.id === logId);
+  if (!entry) return;
 
   if (entry.action === 'edit') {
     const idx = state.items.findIndex(i => i.id === entry.undoData.before.id);
