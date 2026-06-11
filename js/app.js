@@ -21,6 +21,10 @@ let _pendingRevertLogId = null;
 
 async function init() {
   state.items = loadInventory();
+  // 엑셀 시리얼 날짜 일괄 변환 (최초 1회)
+  if (migrateExpiryDates(state.items)) {
+    saveInventory(state.items);
+  }
   const session = await AUTH.getSession();
   state.isAdmin = !!session;
 
@@ -295,21 +299,50 @@ function normalizeExpiryForEdit(raw) {
   if (!raw) return '';
   const t = raw.trim();
 
-  // 순수 정수 → 엑셀 시리얼 변환
-  if (/^\d+$/.test(t)) {
+  // 5자리 엑셀 시리얼 (40000~60000)
+  if (/^\d{5}$/.test(t)) {
     const n = parseInt(t);
-    if (n > 40000) return formatDate(excelSerialToDate(n));
+    if (n > 40000 && n < 60000) return formatDate(excelSerialToDate(n));
   }
 
-  // 쉼표 구분 다중 날짜 중 모두 엑셀 시리얼인 경우
+  // 쉼표 구분 다중 엑셀 시리얼 (모두 5자리 시리얼인 경우)
   if (t.includes(',')) {
     const parts = t.split(',').map(s => s.trim());
-    if (parts.every(p => /^\d+$/.test(p) && parseInt(p) > 40000)) {
+    if (parts.every(p => /^\d{5}$/.test(p) && parseInt(p) > 40000 && parseInt(p) < 60000)) {
       return parts.map(p => formatDate(excelSerialToDate(parseInt(p)))).join(',');
     }
   }
 
   return raw;
+}
+
+// 기존 localStorage 데이터의 엑셀 시리얼 날짜를 YYYY-MM-DD 로 일괄 변환
+function migrateExpiryDates(items) {
+  let changed = false;
+  for (const item of items) {
+    const raw = (item.expiryRaw || '').trim();
+    if (!raw) continue;
+
+    // 5자리 단일 시리얼
+    if (/^\d{5}$/.test(raw)) {
+      const n = parseInt(raw);
+      if (n > 40000 && n < 60000) {
+        item.expiryRaw = formatDate(excelSerialToDate(n));
+        changed = true;
+        continue;
+      }
+    }
+
+    // 쉼표 구분 다중 시리얼
+    if (raw.includes(',') && !raw.includes('-')) {
+      const parts = raw.split(',').map(s => s.trim());
+      if (parts.length > 1 && parts.every(p => /^\d{5}$/.test(p) && parseInt(p) > 40000 && parseInt(p) < 60000)) {
+        item.expiryRaw = parts.map(p => formatDate(excelSerialToDate(parseInt(p)))).join(',');
+        changed = true;
+      }
+    }
+  }
+  return changed;
 }
 
 // ─── 출고 물품 처리 ──────────────────────────────────────────────────────────

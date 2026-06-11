@@ -63,10 +63,12 @@ function parseExpiry(expiryRaw, expiryPeriod) {
   // 소비기한년수가 "제조일자 없음"인 경우
   if (period === '제조일자 없음') {
     // expiryRaw에 날짜가 있으면 그걸 소비기한으로 사용
-    const num = parseFloat(raw);
-    if (!isNaN(num) && num > 40000) {
-      const date = excelSerialToDate(num);
-      return { type: 'expiry', date, text: formatDate(date), daysLeft: daysUntil(date) };
+    if (/^\d{5}$/.test(raw)) {
+      const n = parseInt(raw);
+      if (n > 40000 && n < 60000) {
+        const date = excelSerialToDate(n);
+        return { type: 'expiry', date, text: formatDate(date), daysLeft: daysUntil(date) };
+      }
     }
     const d = parseSimpleDate(raw);
     if (d) return { type: 'expiry', date: d, text: formatDate(d), daysLeft: daysUntil(d) };
@@ -136,12 +138,31 @@ function parseExpiry(expiryRaw, expiryPeriod) {
     return { type: 'manufactured', date: null, text: raw };
   }
 
-  // 엑셀 시리얼 숫자
-  const num = parseFloat(raw);
-  if (!isNaN(num) && num > 40000) {
-    const date = excelSerialToDate(num);
-    // 소비기한년수에서 개월 계산 가능하면 검증
-    return { type: 'expiry', date, text: formatDate(date), daysLeft: daysUntil(date) };
+  // YYYYMMDD (8자리: 20250505 → 2025-05-05)
+  if (/^\d{8}$/.test(raw)) {
+    const yyyy = parseInt(raw.slice(0, 4)), mm = parseInt(raw.slice(4, 6)), dd = parseInt(raw.slice(6, 8));
+    if (yyyy >= 1900 && yyyy <= 2200 && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const date = new Date(yyyy, mm - 1, dd);
+      return { type: 'expiry', date, text: formatDate(date), daysLeft: daysUntil(date) };
+    }
+  }
+
+  // YYMMDD (6자리: 250505 → 2025-05-05)
+  if (/^\d{6}$/.test(raw)) {
+    const yy = parseInt(raw.slice(0, 2)), mm = parseInt(raw.slice(2, 4)), dd = parseInt(raw.slice(4, 6));
+    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+      const date = new Date(yy <= 50 ? 2000 + yy : 1900 + yy, mm - 1, dd);
+      return { type: 'expiry', date, text: formatDate(date), daysLeft: daysUntil(date) };
+    }
+  }
+
+  // 엑셀 시리얼 숫자 (5자리, 40000~60000 범위)
+  if (/^\d{5}$/.test(raw)) {
+    const num = parseInt(raw);
+    if (num > 40000 && num < 60000) {
+      const date = excelSerialToDate(num);
+      return { type: 'expiry', date, text: formatDate(date), daysLeft: daysUntil(date) };
+    }
   }
 
   // 일반 날짜 문자열
