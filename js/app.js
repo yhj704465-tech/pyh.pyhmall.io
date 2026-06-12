@@ -644,11 +644,26 @@ function getGroupStock(code) {
   return { totalBoxes, totalUnits, totalStock, earliestExpiry: withExpiry[0]?.raw || null };
 }
 
+function isSameDay(a, b) {
+  if (!a || !b) return false;
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 function parseOutgoingLine(line) {
-  const slashIdx = line.trim().lastIndexOf('/');
-  if (slashIdx === -1) return null;
-  const nameQuery = line.slice(0, slashIdx).trim();
-  const qtyStr = line.slice(slashIdx + 1).trim();
+  const parts = line.trim().split('/').map(s => s.trim());
+  if (parts.length < 2 || !parts[0]) return null;
+  const nameQuery = parts[0];
+  const qtyStr = parts[1];
+
+  // 3번째 세그먼트가 날짜 형식이면 소비기한으로 인식 (YYMMDD / YYYYMMDD / YYYY-MM-DD)
+  let inputExpiry = null;
+  if (parts.length >= 3 && parts[2]) {
+    const maybeExp = parts[2];
+    if (/^\d{6}$/.test(maybeExp) || /^\d{8}$/.test(maybeExp) || /^\d{4}-\d{2}-\d{2}$/.test(maybeExp)) {
+      inputExpiry = maybeExp;
+    }
+  }
+
   let stockBoxes = 0, unitQty = 0;
   const segments = qtyStr.split(',').map(s => s.trim());
   for (const seg of segments) {
@@ -658,7 +673,7 @@ function parseOutgoingLine(line) {
     else if (unitM) unitQty = parseInt(unitM[1]);
     else { const n = parseInt(seg); if (!isNaN(n) && stockBoxes === 0 && unitQty === 0) stockBoxes = n; }
   }
-  return { nameQuery, qtyStr, stockBoxes, unitQty, matched: fuzzyMatchBest(nameQuery), skipped: false };
+  return { nameQuery, qtyStr, stockBoxes, unitQty, inputExpiry, matched: fuzzyMatchBest(nameQuery), skipped: false };
 }
 
 function openOutgoingModal() {
@@ -803,7 +818,17 @@ function renderOutgoingLine(line, idx) {
         <span class="og-stock-after" ${isNeg ? 'style="color:var(--danger);font-weight:700"' : ''}>
           출고 후: ${afterTotal.toLocaleString()}개${isNeg ? ' ⚠️ 마이너스' : ''}
         </span>
-        ${gs.earliestExpiry ? `<span class="og-expiry">소비기한: ${escapeHtml(gs.earliestExpiry)}</span>` : ''}
+        ${(() => {
+          if (line.inputExpiry) {
+            const targetDate = parseExpiry(line.inputExpiry, '').date;
+            const lotExists = targetDate && state.items.some(i =>
+              i.code === line.matched.code && isSameDay(parseExpiry(i.expiryRaw, i.expiryPeriod).date, targetDate)
+            );
+            const dateStr = targetDate ? formatDate(targetDate) : line.inputExpiry;
+            return `<span class="og-expiry" style="${lotExists ? '' : 'color:var(--danger)'}">지정 소비기한: ${escapeHtml(dateStr)}${lotExists ? '' : ' ⚠️ 해당 로트 없음'}</span>`;
+          }
+          return gs.earliestExpiry ? `<span class="og-expiry">소비기한: ${escapeHtml(gs.earliestExpiry)} (가장 빠른)</span>` : '';
+        })()}
       </div>
     </div>`;
   }
@@ -825,8 +850,15 @@ function renderOutgoingLine(line, idx) {
 
 function processOutgoing(outLines) {
   outLines.filter(l => l.matched && !l.skipped).forEach(line => {
+    const targetDate = line.inputExpiry ? parseExpiry(line.inputExpiry, '').date : null;
     const rows = state.items.filter(i => i.code === line.matched.code)
       .sort((a, b) => {
+        if (targetDate) {
+          const aMatch = isSameDay(parseExpiry(a.expiryRaw, a.expiryPeriod).date, targetDate);
+          const bMatch = isSameDay(parseExpiry(b.expiryRaw, b.expiryPeriod).date, targetDate);
+          if (aMatch && !bMatch) return -1;
+          if (!aMatch && bMatch) return 1;
+        }
         const da = parseExpiry(a.expiryRaw, a.expiryPeriod).daysLeft;
         const db = parseExpiry(b.expiryRaw, b.expiryPeriod).daysLeft;
         if (da === null) return 1; if (db === null) return -1; return da - db;
